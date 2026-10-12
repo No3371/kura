@@ -26,7 +26,7 @@ A **hosted interactive mock** of the Kura product, linked from the user's applic
 
 **As of 2026-10-13:**
 
-Working local app, single provider, old UI. Repo has **zero commits**; no prior projex.
+Working local app, single provider, old UI. Baseline committed (`90ec1a6`, branch `master`); projex: this nav, def, canvas red team.
 
 ### Recent Progress
 - Crawler + polite fetcher (robots.txt, Crawl-delay, honest `KuraBot` UA, backoff) — BRAND OFF adapter, fixture tests — 2026-10-13
@@ -37,10 +37,10 @@ Working local app, single provider, old UI. Repo has **zero commits**; no prior 
 - Design handoff written; Claude Design first pass delivered (19 artboards, CSS tokens `--k-*`) — 2026-10-13
 
 ### Active Work
-- none (this roadmap is the first projex)
+- Orchestrated chain: canvas red team (2610130513-kura-def-nav-vs-design-canvas-redteam.md) → def + nav revised → sprint toward the interactive mock
 
 ### Known Blockers
-- No commits → projex execute cycle (needs committed plans/base branch) unavailable until baseline commit — user must request commit.
+- ~~No commits → projex execute cycle unavailable until baseline commit~~ — cleared 2026-10-13 (`90ec1a6`).
 - Real advisor never run: no `ANTHROPIC_API_KEY` in dev env.
 - KOMEHYO excluded: rejects self-identified bots; same vetting applies to every new provider.
 
@@ -71,7 +71,7 @@ Working local app, single provider, old UI. Repo has **zero commits**; no prior 
 **Goal:** trustworthy starting point for everything after.
 
 **Milestones:**
-- [ ] Baseline commit of current tree (user-requested)
+- [x] Baseline commit of current tree (user-requested) — `90ec1a6`
 - [ ] Real Claude advisor run end-to-end w/ API key; fix whatever the live API surfaces
 - [ ] Second+ crawls → confirm price-drop + sold detection on real data
 - [ ] Incremental refresh mode: hourly "first pages only" sweep that never marks items sold (current crawler only has full sweeps); record last-seen per listing (feeds def L4 stale-link-out decision)
@@ -164,7 +164,7 @@ Working local app, single provider, old UI. Repo has **zero commits**; no prior 
 
 ## Priorities
 
-**Current focus:** Phase 1 — baseline commit + real advisor run + start accruing crawl history (history is the long pole for Phases 4–5).
+**Current focus:** Phase 1 — real advisor run (baseline commit done) + start accruing crawl history (history is the long pole for Phases 4–5).
 
 **Next up:** Phase 2 provider vetting and Phase 3 redesign in parallel — independent code areas (`internal/source/*` vs `internal/web/static`). Canvas pass 2 gates only the multi-provider + member-layer surfaces; single-provider canvas surfaces can be built first.
 
@@ -197,3 +197,4 @@ Working local app, single provider, old UI. Repo has **zero commits**; no prior 
 | 2026-10-13 | Def L2 round: realtime = hourly + daily full; service-dependent surfaces (demand, trends, days-to-sell, notification feed) mocked. Phase 1 gains incremental-refresh milestone (replaces local continuous crawl); Phase 4 notifications → mocked per persona; Phase 5 goal flipped from "replace 示意數據" to "gallery real, signals mocked". |
 | 2026-10-13 | Def L2 round: mocked surfaces unlabelled → Phase 3 adds real-vs-mocked explanation surface, drops 示意數據 labels; link-out only; ≥3 providers (matches Phase 2 exit). |
 | 2026-10-13 | **Revise (canvas drift):** canvas pinned at 1791839497-46ec (same as def) + precedence pointer; Phase 3 gains canvas pass 2 milestone (multi-provider, member layer, advisor states, 行情怎麼算, HANDOFF §4 leftovers) and exit now checks def § Canvas gaps; explanation surface → 行情怎麼算 (prior milestone superseded); 風格 helper grounding; theme × layout required; Phase 5 goal reverses the earlier flip — days-to-sell/trends real-derived w/ hidden/資料不足 states, only demand mocked (prior milestone superseded); Phase 1 records last-seen; Phase 2 rubric adds display + comparative-labelling terms; Phase 4 persona/watchlist UI from pass 2, 低於行情 type pending; Phase 6 adds FX source, cap-state copy, send-readiness gate; 2 open questions added. — trigger: 2610130513-kura-def-nav-vs-design-canvas-redteam.md (F1–F22, Must/Should Fix), re-verified against canvas 1791839497-46ec + `internal/radar/radar.go` + HANDOFF §4; mirrors 2610130449-kura-mock-def.md revision. |
+| 2026-10-13 | **Revise (baseline committed):** Current Position, Known Blockers, Phase 1 baseline milestone, Priorities, Active Work updated — repo no longer has zero commits. — trigger: `git log` shows baseline `90ec1a6` + red team `eae09f3` on `master`. |
