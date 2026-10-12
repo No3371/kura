@@ -1,0 +1,6 @@
+/kura
+/kura.exe
+*.db
+*.db-shm
+*.db-wal
+crawl.log

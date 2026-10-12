@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kura 蔵 · 日本二手精品行情雷達</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236b1f2a'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='serif'>蔵</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <a class="brand" href="#radar"><span class="mark">Kura <span>蔵</span></span><span class="sub">日本二手精品行情雷達</span></a>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="radar" aria-selected="true">行情雷達</button>
+      <button role="tab" data-tab="advisor" aria-selected="false">AI 找包顧問</button>
+      <button role="tab" data-tab="pipeline" aria-selected="false">資料管線</button>
+    </nav>
+    <div class="status" id="status"></div>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= RADAR ======================= -->
+  <section id="tab-radar">
+    <div class="tiles" id="tiles"></div>
+    <form class="filters panel" id="filters" autocomplete="off">
+      <select name="brand" aria-label="品牌"><option value="">全部品牌</option></select>
+      <select name="category" aria-label="包款"><option value="">全部包款</option></select>
+      <select name="min_rank" aria-label="最低成色">
+        <option value="">任何成色</option><option value="S">未使用以上</option><option value="A">輕微使用感以上</option><option value="B">明顯使用感以上</option>
+      </select>
+      <input type="number" name="max_twd" placeholder="預算上限 NT$" min="0" step="1000" aria-label="預算上限">
+      <input type="search" name="q" placeholder="型號或日文名稱，例：ネヴァーフル、M40156" aria-label="關鍵字">
+      <select name="sort" aria-label="排序">
+        <option value="deal">低於行情優先</option><option value="newest">最新上架</option>
+        <option value="price_asc">價格低到高</option><option value="price_desc">價格高到低</option>
+      </select>
+      <label class="check"><input type="checkbox" name="deals" value="1"> 只看低於行情</label>
+    </form>
+    <div class="layout">
+      <div>
+        <div class="result-meta" id="result-meta"></div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <aside>
+        <div class="panel side">
+          <h2>熱門型號</h2>
+          <ul class="mlist" id="models"></ul>
+        </div>
+        <div class="panel side">
+          <h2>近期降價</h2>
+          <ul class="mlist" id="drops"></ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ======================= ADVISOR ======================= -->
+  <section id="tab-advisor" hidden>
+    <div class="chat-wrap">
+      <div class="panel chat">
+        <div class="msgs" id="msgs">
+          <div class="msg bot"><div class="text">
+            <p>您好，我是 Kura 的 AI 找包顧問。告訴我預算、品牌、用途或想要的款式，我會從日本二手精品店的在售商品中，幫您找出價格相對行情合理的選擇。</p>
+          </div></div>
+        </div>
+        <form class="composer" id="composer">
+          <textarea id="input" placeholder="例如：預算 8 萬，想找通勤可以放 A4 的 LV 托特包" aria-label="訊息"></textarea>
+          <button class="btn primary" id="send">送出</button>
+        </form>
+      </div>
+      <div class="panel suggest">
+        <h2>試試看</h2>
+        <button data-q="預算 8 萬，想找通勤可以放 A4 的 LV 托特包，成色 A 以上">預算 8 萬，通勤可放 A4 的 LV 托特包</button>
+        <button data-q="現在哪些愛馬仕包的價格明顯低於行情？">哪些愛馬仕包明顯低於行情？</button>
+        <button data-q="香奈兒菱格紋鏈條包，日本二手大概多少錢？不同成色差多少？">香奈兒菱格紋鏈條包的行情</button>
+        <button data-q="第一次買二手精品，5 萬以內有什麼經典款推薦？">5 萬以內的入門經典款</button>
+        <p class="muted" style="font-size:13px;margin:6px 2px 0">顧問只會推薦 Kura 實際追蹤到的在售商品，並附上行情比較。價格未含國際運費與進口稅費。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= PIPELINE ======================= -->
+  <section id="tab-pipeline" hidden>
+    <div class="pipe-grid">
+      <div class="panel prose">
+        <h3>資料怎麼來的</h3>
+        <ul>
+          <li><b>來源</b>：BRAND OFF 線上商店（日本），依品牌由新到舊逐頁爬取，只保留包款分類。</li>
+          <li><b>禮貌爬取</b>：遵守 robots.txt 與 Crawl-delay、每個網站單線程、請求間隔 ≥3 秒加隨機抖動、遇到 429/5xx 指數退避；User-Agent 誠實標示為 KuraBot。拒絕機器人的網站不爬。</li>
+          <li><b>正規化</b>：日文標題拆成品牌／型號名稱／型號代碼／包款／性別；商品頁補上顏色、尺寸、配件。</li>
+          <li><b>成色沿用店家評級</b>：每個來源保留自己的評級制度與原文定義（BRAND OFF：新品／未使用品／ランクA／B／C），介面直接顯示店家的等級與說明。「同成色比較」只比同一家店的同一等級；跨店時才透過內部對照表換算，並降低信心度。</li>
+          <li><b>價格歷史</b>：首次看到與每次價格變動都寫入一筆，降價是一級事件。</li>
+          <li><b>售出判定</b>：完整掃完一個品牌後，連續兩次完整掃描都不見的商品才標記為售出（避免換頁位移造成誤判）。</li>
+          <li><b>匯率</b>：每次爬取更新 JPY→TWD（open.er-api.com），每個價格都可追溯匯率日期。</li>
+        </ul>
+      </div>
+      <div class="panel prose">
+        <h3>行情怎麼算的</h3>
+        <ul>
+          <li><b>可比較樣本</b>：同品牌、同型號代碼（沒有代碼時用型號名稱）的在售與 180 天內售出商品。</li>
+          <li><b>同店同等級優先</b>：同一家店、同一評級的樣本 ≥3 件時取中位數；樣本 ≥6 件為高信心。</li>
+          <li><b>跨等級換算</b>：樣本不足時，先把各店的等級對到內部成色尺度，再以係數換算後取中位數，信心度降一級。</li>
+          <li><b>低於行情</b> =（行情 − 售價）÷ 行情。這是估計，不是保證；樣本少時介面會標示。</li>
+          <li><b>銷售速度</b>：只用 Kura 親眼看到上架的商品計算售出天數，避免把上架日不明的舊庫存算進去。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;padding:14px 16px">
+      <div class="chart-title"><h4>最近的爬取紀錄</h4><button class="btn" id="crawl-btn" type="button">立即爬取</button></div>
+      <div style="overflow-x:auto"><table class="data" id="runs"></table></div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-label="商品詳情">
+  <div class="drawer-head"><strong id="drawer-title">商品詳情</strong><button class="btn" id="drawer-close" type="button">關閉</button></div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>

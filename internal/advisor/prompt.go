@@ -1,0 +1,108 @@
+package advisor
+
+import (
+	"strings"
+
+	"github.com/anthropics/anthropic-sdk-go"
+
+	"github.com/No3371/kura/internal/listing"
+)
+
+// systemPrompt is static so that it (and the tool list before it) caches.
+const systemPrompt = `你是 Kura 的「AI 找包顧問」，協助台灣買家在日本二手精品市場找包。
+目前的資料來源是日本二手精品店 BRAND OFF 的線上商店，由 Kura 定期爬取並計算行情。
+
+工作方式
+- 先用工具查資料再回答。只推薦工具實際回傳的商品，絕不編造商品、價格、型號或連結。
+- 商品標題是日文。用 keywords 搜尋時請用日文片假名、英文或型號，必要時一次給多種寫法，例如：
+  Neverfull → ["ネヴァーフル"]、Speedy → ["スピーディ"]、Birkin → ["バーキン"]、Kelly → ["ケリー"]、
+  Chanel 菱格紋 → ["マトラッセ"]、Luggage → ["ラゲージ"]、Puzzle → ["パズル"]。
+- 找不到時放寬條件（例如拿掉等級或預算限制、換關鍵字）再試一次，並告訴使用者你放寬了什麼。
+- 使用者沒說預算或用途時，可以先搜尋給出代表性選項，再用一句話詢問偏好；不要連續追問。
+
+呈現方式
+- 一律使用繁體中文，語氣專業、簡潔，像精品店的資深顧問。
+- 推薦商品時，在商品名稱後面附上 [[商品ID]]（例如 [[brandoff:2101220315016]]），介面會把它變成商品卡片。
+  每次推薦 2–4 件為宜，說明為什麼推薦（價格相對行情、成色、配件、尺寸用途）。
+- 價格以新台幣為主、日圓為輔，並註明匯率日期。提醒價格未含國際運費與進口稅費。
+- 成色一律使用來源店家自己的評級與定義：工具結果的 condition 欄位附有店家的等級名稱（例如 ランクA）、
+  店家原文定義與中文意思。介紹商品時寫出店家的等級並用一句話轉述它的定義，不要改用自己的分級說法。
+  不同店家的同名等級標準不一定相同，比較跨店商品時要提醒這點。
+- 「行情價」是同品牌同型號、同成色在售或近期售出商品的中位數；comps 是比較樣本數。
+  信心度低或樣本少時要說明；deal_pct 為正代表低於行情。不要把行情估計說成保證。
+- price_anomaly 為 true 的商品比行情低一半以上，多半有標題沒寫的瑕疵或缺件：不要當成好價推薦，
+  若提到它，請提醒使用者先用 get_listing 或商品頁確認狀況。
+- Kura 不提供真偽鑑定；真偽與商品狀況以賣家說明為準。
+
+可用的分類 (category)：` + "{{categories}}" + `
+可用的品牌 (brand)：` + "{{brands}}"
+
+func buildSystemPrompt() string {
+	var cats, brands []string
+	for _, c := range listing.Categories {
+		cats = append(cats, c.Key+"="+c.ZH)
+	}
+	for _, b := range listing.Brands {
+		brands = append(brands, b.Name+"("+b.ZH+")")
+	}
+	return strings.NewReplacer("{{categories}}", strings.Join(cats, ", "), "{{brands}}", strings.Join(brands, ", ")).
+		Replace(systemPrompt)
+}
+
+func toolDefs() []anthropic.BetaToolUnionParam {
+	var catKeys []string
+	for _, c := range listing.Categories {
+		catKeys = append(catKeys, c.Key)
+	}
+	ranks := []string{"N", "S", "SA", "A", "AB", "B", "BC", "C"}
+	defs := []anthropic.BetaToolParam{
+		{
+			Name: "search_listings",
+			Description: anthropic.String("Search active pre-owned bag listings. Every filter is optional. " +
+				"Returns matches with TWD/JPY price, condition, fair-value estimate (fair_twd, deal_pct, confidence) and specs. " +
+				"Titles are Japanese: put katakana, English names or model codes in keywords."),
+			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"brand":         map[string]any{"type": "string", "description": "Brand name, e.g. LOUIS VUITTON, HERMES, CHANEL"},
+				"category":      map[string]any{"type": "string", "enum": catKeys},
+				"keywords":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Any-match keywords (katakana model names, model codes, colours, materials)"},
+				"model_code":    map[string]any{"type": "string", "description": "Exact model code, e.g. M40156"},
+				"min_rank":      map[string]any{"type": "string", "enum": ranks, "description": "Minimum condition on Kura's cross-source scale (N new, S unused, A light use, B visible use, C heavy use). Results still carry each shop's own grade."},
+				"min_price_twd": map[string]any{"type": "integer"},
+				"max_price_twd": map[string]any{"type": "integer"},
+				"only_deals":    map[string]any{"type": "boolean", "description": "Only listings at least 5% below fair value"},
+				"sort":          map[string]any{"type": "string", "enum": []string{"deal", "price_asc", "price_desc", "newest"}},
+				"limit":         map[string]any{"type": "integer", "minimum": 1, "maximum": 10},
+			}},
+		},
+		{
+			Name: "model_price_stats",
+			Description: anthropic.String("Market statistics for one model: price by condition rank, how many sold, " +
+				"sell-through and median days to sell, plus the cheapest active listings."),
+			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"brand":      map[string]any{"type": "string"},
+				"model_code": map[string]any{"type": "string"},
+				"group_key":  map[string]any{"type": "string", "description": "Use when the model has no code (from market_overview)"},
+			}, Required: []string{"brand"}},
+		},
+		{
+			Name:        "get_listing",
+			Description: anthropic.String("Full details of one listing: specs, notes, price history and URL."),
+			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"id": map[string]any{"type": "string", "description": "Listing id, e.g. brandoff:2101220315016"},
+			}, Required: []string{"id"}},
+		},
+		{
+			Name:        "market_overview",
+			Description: anthropic.String("Overview of the tracked market: listing counts and the most-listed models with median prices. Optionally for one brand."),
+			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"brand": map[string]any{"type": "string"},
+			}},
+		},
+	}
+	out := make([]anthropic.BetaToolUnionParam, len(defs))
+	for i := range defs {
+		defs[i].EagerInputStreaming = anthropic.Bool(true)
+		out[i] = anthropic.BetaToolUnionParam{OfTool: &defs[i]}
+	}
+	return out
+}

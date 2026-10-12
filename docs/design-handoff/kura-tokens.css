@@ -1,0 +1,110 @@
+/* Kura 蔵 — design tokens, first pass (2026-10-13).
+   Paste at the top of internal/web/static/style.css.
+   Fonts (Google Fonts, one <link>):
+   https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=LXGW+WenKai+TC&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;600&family=Shippori+Mincho:wght@400;600&display=swap
+*/
+
+:root {
+  /* Type */
+  --k-font-display: "Noto Serif TC", serif;                 /* headings, lede */
+  --k-font-num: "EB Garamond", "Noto Serif TC", serif;      /* prices, brand names */
+  --k-font-ja: "Shippori Mincho", "Noto Serif TC", serif;   /* Japanese model names, shop grades */
+  --k-font-ui: "Noto Sans TC", "PingFang TC", system-ui, sans-serif; /* UI, data, charts */
+  --k-font-hand: "LXGW WenKai TC", "Noto Serif TC", serif;  /* Kura's short margin notes only */
+
+  --k-text-12: 12px;  /* caption, meta */
+  --k-text-13: 13px;  /* badges, detail lines */
+  --k-text-14: 14px;  /* controls */
+  --k-text-15: 15px;  /* body, margin note */
+  --k-text-18: 18px;  /* model name (ja) */
+  --k-text-20: 20px;  /* section heading */
+  --k-text-28: 28px;  /* card price */
+  --k-text-34: 34px;  /* lede */
+  --k-text-40: 40px;  /* display */
+  --k-num: lining-nums tabular-nums; /* use with font-variant-numeric on prices */
+
+  /* Space (4px base) */
+  --k-space-1: 4px;  --k-space-2: 8px;  --k-space-3: 12px; --k-space-4: 16px;
+  --k-space-6: 24px; --k-space-8: 32px; --k-space-12: 48px; --k-space-16: 64px;
+
+  /* Radius */
+  --k-radius-1: 2px;     /* controls, tags, badges */
+  --k-radius-2: 4px;     /* drawer, dialogs */
+  --k-radius-pill: 999px;/* status pill only */
+
+  /* Colour — day shop (light) */
+  --k-paper: #F5F0E6;
+  --k-paper-sunk: #EDE6D8;
+  --k-surface: #FBF8F2;
+  --k-ink: #1E1915;
+  --k-ink-2: #4B423A;
+  --k-ink-3: #6B6055;
+  --k-rule: #DDD2BF;
+  --k-rule-strong: #B9A88C;
+  --k-brass: #A08158;          /* hairlines only, never text */
+  --k-accent: #6B1F2A;         /* oxblood fill */
+  --k-accent-ink: #6B1F2A;     /* oxblood text */
+  --k-accent-wash: #F2E4E1;
+  --k-on-accent: #FBF5EE;
+  --k-caution: #7A4E0E;        /* anomaly text */
+  --k-caution-wash: #F6ECD6;
+  --k-caution-rule: #D4AC63;
+  --k-mat: #FFFFFF;            /* photo mat */
+  --k-mat-line: #E4DACA;
+  --k-mat-ink: #BDB19D;
+  --k-focus: #6B1F2A;
+  --k-shadow: 0 1px 0 rgba(60,40,20,.05), 0 10px 28px -14px rgba(60,40,20,.22);
+}
+
+/* Night shop (dark): follows the OS unless the user picked light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --k-paper: #1B1815; --k-paper-sunk: #151310; --k-surface: #24201C;
+    --k-ink: #EEE7DB; --k-ink-2: #C7BCAB; --k-ink-3: #A09482;
+    --k-rule: #3A332C; --k-rule-strong: #5A5045; --k-brass: #8A714E;
+    --k-accent: #8E2E3B; --k-accent-ink: #E3A1A6; --k-accent-wash: #3A1F23; --k-on-accent: #FBF0EC;
+    --k-caution: #E2B86A; --k-caution-wash: #33291A; --k-caution-rule: #6B5328;
+    --k-mat: #ECE5D7; --k-mat-line: #D6CCB9; --k-mat-ink: #A99E8A;
+    --k-focus: #E3A1A6;
+    --k-shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --k-paper: #1B1815; --k-paper-sunk: #151310; --k-surface: #24201C;
+  --k-ink: #EEE7DB; --k-ink-2: #C7BCAB; --k-ink-3: #A09482;
+  --k-rule: #3A332C; --k-rule-strong: #5A5045; --k-brass: #8A714E;
+  --k-accent: #8E2E3B; --k-accent-ink: #E3A1A6; --k-accent-wash: #3A1F23; --k-on-accent: #FBF0EC;
+  --k-caution: #E2B86A; --k-caution-wash: #33291A; --k-caution-rule: #6B5328;
+  --k-mat: #ECE5D7; --k-mat-line: #D6CCB9; --k-mat-ink: #A99E8A;
+  --k-focus: #E3A1A6;
+  --k-shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+}
+
+/* Base */
+body { background: var(--k-paper); color: var(--k-ink); font-family: var(--k-font-ui); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 2px; border-radius: var(--k-radius-1); }
+
+/* Photo mat: makes the shop's white-background photo look intentional in both themes.
+   multiply turns the photo's white into the mat colour (warm off-white at night). */
+.k-mat { aspect-ratio: 1 / 1; background: var(--k-mat); border: 1px solid var(--k-rule);
+  box-shadow: inset 0 0 0 9px var(--k-mat), inset 0 0 0 10px var(--k-mat-line);
+  padding: 10%; box-sizing: border-box; display: grid; place-items: center; }
+.k-mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-mat.is-sold { opacity: .6; }
+
+/* Prices */
+.k-price { font-family: var(--k-font-num); font-weight: 500; font-variant-numeric: var(--k-num); line-height: 1; }
+
+/* Valuation badges (always icon + words; colour is never the only signal) */
+.k-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: var(--k-radius-1); font-size: var(--k-text-13); }
+.k-badge--below   { background: var(--k-accent-wash); color: var(--k-accent-ink); border: 1px solid var(--k-accent); font-weight: 700; }
+.k-badge--low     { color: var(--k-ink-2); border: 1px dashed var(--k-rule-strong); }
+.k-badge--anomaly { background: var(--k-caution-wash); color: var(--k-caution); border: 1px solid var(--k-caution-rule); font-weight: 500; }
+.k-badge--near, .k-badge--above, .k-badge--none { color: var(--k-ink-3); padding: 0; }
+
+/* Condition tag: solid = graded by the shop; dashed + 「賣家自評」 = graded by the seller */
+.k-grade { font-family: var(--k-font-ja); font-size: var(--k-text-12); padding: 1px 6px; border-radius: var(--k-radius-1); border: 1px solid var(--k-rule-strong); white-space: nowrap; }
+.k-grade--seller { border-style: dashed; }
+
+/* Margin note */
+.k-note { font-family: var(--k-font-hand); font-size: var(--k-text-15); line-height: 1.5; color: var(--k-ink-2); }
