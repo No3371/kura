@@ -36,6 +36,12 @@ func (c Card) IsBag() bool { return strings.HasPrefix(c.CategoryID, bagCategoryP
 type ListPage struct {
 	Total int // total hits for the query, as displayed by the site
 	Cards []Card
+	// Sold holds the tiles the page marks SOLDOUT (.product__item--soldout).
+	// BRAND OFF keeps sold items on its list pages for a while. Rejected:
+	// keeping them in Cards — stored as listings they would show as on sale,
+	// count as active comparables, and never go missing for
+	// store.SweepMissing, since every complete sweep still sees them.
+	Sold []Card
 }
 
 // Badges share the numbered-icon scheme with grades (see condition.go).
@@ -99,6 +105,10 @@ func ParseList(r io.Reader, base *url.URL) (ListPage, error) {
 		})
 		c.PriceJPY, c.WasPriceJPY = splitPrices(prices)
 		applyTitle(&c.Listing, title)
+		if s.Find(".product__item--soldout").Length() > 0 {
+			page.Sold = append(page.Sold, c)
+			return
+		}
 		page.Cards = append(page.Cards, c)
 	})
 	return page, nil

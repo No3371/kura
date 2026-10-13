@@ -194,6 +194,35 @@ func (s *Store) PendingDetails(ctx context.Context, source string, limit int) ([
 	if err != nil {
 		return nil, err
 	}
+	return scanTodos(rows)
+}
+
+// RecheckDue returns up to limit active listings of source in targets whose
+// product page was last read before checkedBefore and that no list page has
+// shown since seenBefore, least recently read first, so successive crawls
+// rotate through them. Listings never read are PendingDetails' and are not
+// returned.
+func (s *Store) RecheckDue(ctx context.Context, source string, targets []string, seenBefore, checkedBefore time.Time, limit int) ([]DetailTodo, error) {
+	if len(targets) == 0 || limit <= 0 {
+		return nil, nil
+	}
+	args := []any{source, checkedBefore.Unix(), seenBefore.Unix()}
+	for _, t := range targets {
+		args = append(args, t)
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, url FROM listings
+		WHERE source=? AND status='active' AND detail_at IS NOT NULL AND detail_at < ? AND last_seen < ?
+		  AND target IN (`+strings.TrimSuffix(strings.Repeat("?,", len(targets)), ",")+`)
+		ORDER BY detail_at, id LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanTodos(rows)
+}
+
+// scanTodos reads (id, url) rows into DetailTodos and closes rows.
+func scanTodos(rows *sql.Rows) ([]DetailTodo, error) {
 	defer rows.Close()
 	var out []DetailTodo
 	for rows.Next() {
@@ -219,11 +248,28 @@ func (s *Store) SaveDetail(ctx context.Context, id string, d listing.Detail, now
 	return err
 }
 
-// MarkGone records that a product page no longer exists.
-func (s *Store) MarkGone(ctx context.Context, id string, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE listings SET status='gone', gone_at=?, detail_at=? WHERE id=?`,
-		now.Unix(), now.Unix(), id)
-	return err
+// MarkGone records that listing id is no longer for sale: its product page is
+// gone or says sold, or a list page shows it sold. Only an active listing
+// changes, and ok reports whether it did. Rejected: updating any row, which
+// moves gone_at forward on every crawl that repeats the signal (a sold row
+// stays in ALLU's newest pages for days). detail_at is not written: a list-row
+// signal reads no product page, and stamping it would skip the first
+// product-page read if the item is relisted.
+// Hazard of leaving detail_at unset: a listing whose first product-page read
+// says gone while a list page keeps showing it as for sale flaps every crawl —
+// RecordSeen reactivates it, PendingDetails returns it again (detail_at NULL),
+// the read marks it gone again, and gone_at moves forward each time, spending
+// one first fetch per crawl. Adapters keep list tiles the shop marks sold out
+// of their listings (passing their ids as sold), which removes the known
+// trigger; a list page that shows a sold item with no sold marker still flaps.
+func (s *Store) MarkGone(ctx context.Context, id string, now time.Time) (ok bool, err error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE listings SET status='gone', gone_at=? WHERE id=? AND status='active'`,
+		now.Unix(), id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // AllRows loads every listing with its price history. The dataset is small
@@ -282,14 +328,16 @@ func (s *Store) AllRows(ctx context.Context) ([]Row, error) {
 	return out, pts.Err()
 }
 
-// Version changes whenever listing data changes; the radar uses it to decide
-// when to rebuild its in-memory index.
+// Version changes whenever listing data changes or a sweep completes (the
+// radar's watched rule reads complete sweeps); the radar uses it to decide when
+// to rebuild its in-memory index.
 func (s *Store) Version(ctx context.Context) (string, error) {
-	var n, last, pts int64
+	var n, last, pts, runs int64
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(last_seen),0) +
-		COALESCE(MAX(gone_at),0) + COALESCE(MAX(detail_at),0), (SELECT COUNT(*) FROM price_points) FROM listings`).
-		Scan(&n, &last, &pts)
-	return fmt.Sprintf("%d/%d/%d", n, last, pts), err
+		COALESCE(MAX(gone_at),0) + COALESCE(MAX(detail_at),0), (SELECT COUNT(*) FROM price_points),
+		(SELECT COUNT(*) FROM crawl_runs WHERE complete=1) FROM listings`).
+		Scan(&n, &last, &pts, &runs)
+	return fmt.Sprintf("%d/%d/%d/%d", n, last, pts, runs), err
 }
 
 // Run is one sweep of one crawl target.
@@ -339,6 +387,31 @@ func (s *Store) RecentRuns(ctx context.Context, limit int) ([]Run, error) {
 			r.FinishedAt = time.Unix(fin, 0)
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// Pair is one crawl target of one source.
+type Pair struct{ Source, Target string }
+
+// Onboarded returns, per source and target, when its first complete sweep
+// finished. Runs that stopped early (capped, failed, or never finished) are
+// not onboarding: they saw only part of the catalogue.
+func (s *Store) Onboarded(ctx context.Context) (map[Pair]time.Time, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT source, target, MIN(finished_at) FROM crawl_runs
+		WHERE complete=1 AND finished_at IS NOT NULL GROUP BY source, target`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[Pair]time.Time{}
+	for rows.Next() {
+		var p Pair
+		var at int64
+		if err := rows.Scan(&p.Source, &p.Target, &at); err != nil {
+			return nil, err
+		}
+		out[p] = time.Unix(at, 0)
 	}
 	return out, rows.Err()
 }

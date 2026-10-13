@@ -190,9 +190,9 @@ func TestListingAPI(t *testing.T) {
 	}
 
 	type modelBody struct {
-		Model  radar.ModelStats `json:"model"`
-		Items  []radar.Item     `json:"items"`
-		Scheme *listing.Scheme  `json:"scheme"`
+		Model   radar.ModelStats `json:"model"`
+		Items   []radar.Item     `json:"items"`
+		Schemes []listing.Scheme `json:"schemes"`
 	}
 	getModel := func(path string) (int, modelBody) {
 		t.Helper()
@@ -208,8 +208,8 @@ func TestListingAPI(t *testing.T) {
 	}
 	if code, mb := getModel("/api/models/HERMES/C1"); code != http.StatusOK {
 		t.Errorf("model C1: code %d, want 200", code)
-	} else if mb.Scheme == nil || mb.Scheme.Shop != "テスト店" || len(mb.Items) != 1 || mb.Model.Active != 1 {
-		t.Errorf("model C1: scheme %+v, %d items, active %d", mb.Scheme, len(mb.Items), mb.Model.Active)
+	} else if len(mb.Schemes) != 1 || mb.Schemes[0].Shop != "テスト店" || len(mb.Items) != 1 || mb.Model.Active != 1 {
+		t.Errorf("model C1: schemes %+v, %d items, active %d", mb.Schemes, len(mb.Items), mb.Model.Active)
 	}
 	// An escaped "/" stays inside the key rather than splitting the path.
 	if code, mb := getModel("/api/models/HERMES/C%2F2"); code != http.StatusOK {
@@ -222,6 +222,48 @@ func TestListingAPI(t *testing.T) {
 	}
 }
 
+// A group spanning two shops returns both shops' ladders, ordered by source.
+func TestModelSchemesPerShop(t *testing.T) {
+	for _, src := range []string{"wy", "wx"} {
+		listing.RegisterScheme(listing.Scheme{Source: src, Name: "テスト", Shop: map[string]string{"wx": "店X", "wy": "店Y"}[src],
+			Graded: "店家鑑定", Grades: []listing.Grade{{Code: "A", Label: "ランクA", Rank: listing.RankA}}})
+	}
+	st, err := store.Open(filepath.Join(t.TempDir(), "kura.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	for _, src := range []string{"wy", "wx"} {
+		l := listing.Listing{Source: src, SourceID: "1", URL: "u", Brand: "HERMES", Title: "t",
+			ModelCode: "SHARED1", Grade: "A", Rank: listing.RankA, PriceJPY: 100000}
+		if _, err := st.RecordSeen(context.Background(), "HERMES", l, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fxc := &fx.Converter{Fallback: 0.2}
+	h := (&Server{Store: st, Radar: &radar.Engine{Store: st, FX: fxc}, FX: fxc,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/models/HERMES/SHARED1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code %d: %s", rec.Code, rec.Body)
+	}
+	var mb struct {
+		Items   []radar.Item     `json:"items"`
+		Schemes []listing.Scheme `json:"schemes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &mb); err != nil {
+		t.Fatal(err)
+	}
+	var shops []string
+	for _, sc := range mb.Schemes {
+		shops = append(shops, sc.Shop)
+	}
+	if len(mb.Items) != 2 || !reflect.DeepEqual(shops, []string{"店X", "店Y"}) {
+		t.Errorf("%d items, scheme shops %v, want 2 items and [店X 店Y]", len(mb.Items), shops)
+	}
+}
+
 func TestMemberAPI(t *testing.T) {
 	listing.RegisterScheme(listing.Scheme{Source: "wm", Name: "テスト", Shop: "テスト店", Graded: "店家鑑定",
 		Grades: []listing.Grade{{Code: "A", Label: "ランクA", Short: "A", Rank: listing.RankA}}})
@@ -231,8 +273,8 @@ func TestMemberAPI(t *testing.T) {
 	}
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
-	// t0 is the initial crawl; listings first seen a day or more later are
-	// ones Kura watched appear.
+	// t0 is the initial crawl; listings first seen after a brand's initial
+	// crawl completed are ones Kura watched appear.
 	t0 := time.Now().Add(-30 * time.Hour).Truncate(time.Second)
 	seenAs := func(brand, id, code string, price int64, at time.Time) {
 		t.Helper()
@@ -260,6 +302,20 @@ func TestMemberAPI(t *testing.T) {
 	hermes("h2", 120000, t0.Add(10*time.Minute))
 	hermes("h3", 122000, t0.Add(10*time.Minute))
 	hermes("hold", 95000, t0.Add(20*time.Minute))
+	// The initial crawl of each brand completes at t0+30m: listings first
+	// seen later are ones Kura watched appear.
+	onboard := func(target string) {
+		t.Helper()
+		id, err := st.StartRun(ctx, "wm", target, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.FinishRun(ctx, store.Run{ID: id, FinishedAt: t0.Add(30 * time.Minute), Complete: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	onboard("LOUIS VUITTON")
+	onboard("HERMES")
 
 	fxc := &fx.Converter{Fallback: 0.2}
 	h := (&Server{Store: st, Radar: &radar.Engine{Store: st, FX: fxc}, FX: fxc,
@@ -352,7 +408,7 @@ func TestMemberAPI(t *testing.T) {
 	}
 
 	// Once the cut listing sells, it is a 已找到新主人 instead of a 降價.
-	if err := st.MarkGone(ctx, "wm:cut", t0.Add(27*time.Hour)); err != nil {
+	if _, err := st.MarkGone(ctx, "wm:cut", t0.Add(27*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	body.Watchlist, body.Events = nil, nil

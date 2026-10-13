@@ -124,6 +124,8 @@ type Item struct {
 	Fair            *Valuation   `json:"fair,omitempty"`
 	Drop            *Drop        `json:"drop,omitempty"`
 	History         []PricePoint `json:"history,omitempty"`
+	// watched: Kura saw the listing appear (see watched).
+	watched bool
 }
 
 // GradeStat is price by one source grade.
@@ -154,7 +156,8 @@ type ModelStats struct {
 	// SellThrough is sold / (sold + active) over everything observed.
 	SellThrough float64 `json:"sell_through"`
 	// MedianDaysToSell only counts items Kura saw being listed (first seen
-	// after the initial crawl), since older items' listing date is unknown.
+	// after its shop and brand's first complete sweep), since older items'
+	// listing date is unknown.
 	MedianDaysToSell *float64 `json:"median_days_to_sell,omitempty"`
 }
 
@@ -169,7 +172,7 @@ type Engine struct {
 	byID    map[string]*Item
 	groups  map[string][]*Item // brand|group_key -> items
 	builtAt time.Time
-	epoch   time.Time // earliest first_seen = when crawling began
+	epoch   time.Time // earliest first_seen = when crawling began (Overview.Since, sold-stats gate)
 	latest  time.Time // latest observation (seen or gone) = last sweep
 }
 
@@ -196,13 +199,17 @@ func (e *Engine) Refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.build(rows, v)
+	onboarded, err := e.Store.Onboarded(ctx)
+	if err != nil {
+		return err
+	}
+	e.build(rows, onboarded, v)
 	return nil
 }
 
 func groupID(brand, key string) string { return brand + "|" + key }
 
-func (e *Engine) build(rows []store.Row, version string) {
+func (e *Engine) build(rows []store.Row, onboarded map[store.Pair]time.Time, version string) {
 	now := e.now()
 	items := make([]*Item, 0, len(rows))
 	byID := make(map[string]*Item, len(rows))
@@ -211,6 +218,7 @@ func (e *Engine) build(rows []store.Row, version string) {
 	for i := range rows {
 		r := &rows[i]
 		it := e.toItem(r, now)
+		it.watched = watched(r, onboarded)
 		items = append(items, it)
 		byID[it.ID] = it
 		if it.GroupKey != "" {
@@ -487,26 +495,44 @@ func dealScore(it *Item) float64 {
 	return it.Fair.DealPct * confidenceWeight[it.Fair.Confidence]
 }
 
-// watched reports whether Kura saw the listing appear: first seen after the
-// initial crawl, which takes in the whole catalogue as already listed. Days to
-// sell and 最新上架 order both turn on it.
-func (e *Engine) watched(it *Item) bool {
-	return it.FirstSeen.After(e.epoch.Add(24 * time.Hour))
+// watched reports whether Kura saw r appear on its shop: first seen after its
+// own source and target finished onboarding — the end of that pair's first
+// complete sweep, which takes in the whole catalogue as already listed. Days
+// to sell and 最新上架 order both turn on it.
+// Rejected: one epoch for the whole database (earliest first_seen + 24 h). A
+// shop or brand Kura starts crawling later then has its entire initial sweep
+// read as newly listed, flooding 最新上架 and giving days to sell made-up
+// listing dates; and a listing that really appeared inside the 24 h sorts as
+// old stock. A pair with no complete sweep has no baseline, so nothing in it
+// is watched: a capped sweep reaches only the first list pages, and old stock
+// rises into them whenever newer listings above it sell.
+// Hazard: the same shift happens during the first complete sweep itself — a
+// listing pushed up past the pages already read is missed, first seen on the
+// next sweep, and reads as watched though it was old stock. Not padded with a
+// grace period after onboarding: that would hide listings genuinely posted
+// then, and the miss is rare (a handful of sales during one sweep).
+func watched(r *store.Row, onboarded map[store.Pair]time.Time) bool {
+	at, ok := onboarded[store.Pair{Source: r.Source, Target: r.Target}]
+	return ok && r.FirstSeen.After(at)
 }
 
 // newer reports whether a was listed on its shop more recently than b — the
 // one 最新上架 order, used by sort=newest (Home's shelf, Browse, the advisor)
 // and the demo member's 新上架 pick. Listings Kura watched appear rank first,
-// latest first_seen first. Initial-crawl listings follow in the opposite
-// direction: their first_seen is only crawl order, and a source sweeps its
-// list pages newest first (crawl.Source.Sweep; BRAND OFF's sort=Number1), so
-// an earlier first_seen is a newer listing.
+// latest first_seen first. Listings from their pair's initial sweep follow in
+// the opposite direction: their first_seen is only crawl order, and a source
+// that sweeps its list pages newest first (crawl.Source.Sweep; BRAND OFF's
+// sort=Number1) makes an earlier first_seen a newer listing. A source that
+// never completes a sweep of a brand (GALLERY RARE reads one page in the
+// shop's own order; ALLU reads at most ten pages newest first; so none of
+// those listings is ever watched) gets only crawl order: its first crawl's
+// stock stays ahead of items it first sees later.
 // Rejected: latest first_seen throughout — on a first sweep it surfaces the
 // deepest pages, the shop's oldest stock, as 最新上架. Within one second
 // (about a list page) the shop's order is lost; ties fall back to id so the
 // order is stable across requests.
 func (e *Engine) newer(a, b *Item) bool {
-	wa, wb := e.watched(a), e.watched(b)
+	wa, wb := a.watched, b.watched
 	switch {
 	case wa != wb:
 		return wa
@@ -683,7 +709,7 @@ func (e *Engine) stats(g []*Item) ModelStats {
 		} else {
 			s.Sold++
 			// Only items we watched appear can tell us how long selling took.
-			if it.GoneAt != nil && e.watched(it) {
+			if it.GoneAt != nil && it.watched {
 				days = append(days, it.GoneAt.Sub(it.FirstSeen).Hours()/24)
 			}
 		}

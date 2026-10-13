@@ -70,7 +70,7 @@ func TestSoldStatsGatedUntilHistory(t *testing.T) {
 	if _, err := st.RecordSeen(ctx, "HERMES", old, time.Now().Add(-15*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.MarkGone(ctx, "brandoff:2000", time.Now()); err != nil {
+	if _, err := st.MarkGone(ctx, "brandoff:2000", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := tools.Radar.Refresh(ctx); err != nil {

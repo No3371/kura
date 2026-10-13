@@ -204,7 +204,14 @@ func TestAgentRollsBackFailedTurn(t *testing.T) {
 }
 
 func TestPromptStatesThresholds(t *testing.T) {
+	listing.RegisterScheme(listing.Scheme{Source: "ax", Shop: "店甲"})
+	listing.RegisterScheme(listing.Scheme{Source: "ay", Shop: "店乙"})
 	p := buildSystemPrompt()
+	for _, shop := range []string{"店甲", "店乙"} {
+		if !strings.Contains(p, shop) {
+			t.Errorf("system prompt does not name registered shop %s", shop)
+		}
+	}
 	if want := "低超過 " + pctText(radar.AnomalyPct) + "%"; !strings.Contains(p, want) {
 		t.Errorf("system prompt lacks %q", want)
 	}

@@ -2,6 +2,7 @@ package advisor
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 
 // systemPrompt is static so that it (and the tool list before it) caches.
 const systemPrompt = `你是 Kura 的「AI 找包顧問」，協助台灣買家在日本二手精品市場找包。
-目前的資料來源是日本二手精品店 BRAND OFF 的線上商店，由 Kura 定期爬取並計算行情。
+目前的資料來源是日本二手精品店 {{shops}} 的線上商店，由 Kura 定期爬取並計算行情。
 
 工作方式
 - 先用工具查資料再回答。只推薦工具實際回傳的商品，絕不編造商品、價格、型號或連結。
@@ -50,8 +51,21 @@ func buildSystemPrompt() string {
 	for _, b := range listing.Brands {
 		brands = append(brands, b.Name+"("+b.ZH+")")
 	}
+	// Shops come from the registered schemes (source adapters register theirs
+	// in init, before any advisor is built), so the prompt names every shop
+	// Kura crawls without a second list to keep in step.
+	var shops []string
+	for _, sc := range listing.Schemes() {
+		if !slices.Contains(shops, sc.Shop) {
+			shops = append(shops, sc.Shop)
+		}
+	}
+	shopText := strings.Join(shops, "、")
+	if shopText == "" {
+		shopText = "（尚無）"
+	}
 	return strings.NewReplacer("{{categories}}", strings.Join(cats, ", "), "{{brands}}", strings.Join(brands, ", "),
-		"{{anomaly_pct}}", pctText(radar.AnomalyPct)).
+		"{{anomaly_pct}}", pctText(radar.AnomalyPct), "{{shops}}", shopText).
 		Replace(systemPrompt)
 }
 

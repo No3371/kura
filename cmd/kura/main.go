@@ -25,7 +25,9 @@ import (
 	"github.com/No3371/kura/internal/fx"
 	"github.com/No3371/kura/internal/listing"
 	"github.com/No3371/kura/internal/radar"
+	"github.com/No3371/kura/internal/source/allu"
 	"github.com/No3371/kura/internal/source/brandoff"
+	"github.com/No3371/kura/internal/source/grare"
 	"github.com/No3371/kura/internal/store"
 	"github.com/No3371/kura/internal/web"
 )
@@ -33,13 +35,14 @@ import (
 const defaultBrands = "HERMES,CHANEL,LOUIS VUITTON,CELINE,LOEWE,GOYARD"
 
 type config struct {
-	db, brands, addr, model string
-	advisor, openaiModel    string
-	openaiEffort            string
-	delay, every            time.Duration
-	maxPages, details       int
-	fxFallback              float64
-	crawlOnStart, verbose   bool
+	db, brands, addr, model    string
+	sources                    string
+	advisor, openaiModel       string
+	openaiEffort               string
+	delay, every, recheckAfter time.Duration
+	maxPages, details          int
+	fxFallback                 float64
+	crawlOnStart, verbose      bool
 }
 
 func main() {
@@ -52,9 +55,11 @@ func main() {
 	var c config
 	fs.StringVar(&c.db, "db", "kura.db", "SQLite database path")
 	fs.StringVar(&c.brands, "brands", defaultBrands, "comma-separated brands to crawl")
+	fs.StringVar(&c.sources, "sources", "brandoff,grare,allu", "comma-separated sources to crawl (brandoff, grare, allu)")
 	fs.DurationVar(&c.delay, "delay", 3*time.Second, "minimum delay between requests to the source (robots.txt Crawl-delay wins if longer)")
-	fs.IntVar(&c.maxPages, "max-pages", 0, "max list pages per brand per sweep (0 = all; capped sweeps never mark items sold)")
-	fs.IntVar(&c.details, "details", 150, "max product pages to fetch per crawl for colour/size/accessories")
+	fs.IntVar(&c.maxPages, "max-pages", 0, "max list pages per brand per sweep (0 = all; capped sweeps never count unseen items toward sold)")
+	fs.IntVar(&c.details, "details", 150, "max product pages to fetch per source per crawl for colour/size/accessories")
+	fs.DurationVar(&c.recheckAfter, "recheck-after", 24*time.Hour, "least time between product-page re-checks of one listing, for brands whose sweep did not complete (0 = never; re-checks use what -details leaves)")
 	fs.Float64Var(&c.fxFallback, "fx-fallback", 0.20, "JPY→TWD rate used until a live rate is fetched")
 	fs.BoolVar(&c.verbose, "v", false, "debug logging")
 	if cmd == "serve" {
@@ -114,7 +119,7 @@ func setup(ctx context.Context, c config, log *slog.Logger) (*deps, error) {
 	if err != nil {
 		return nil, err
 	}
-	if n, err := st.BackfillGrades(ctx, brandoff.Scheme); err != nil {
+	if n, err := st.BackfillGrades(ctx, listing.Schemes()...); err != nil {
 		return nil, err
 	} else if n > 0 {
 		log.Info("backfilled source condition grades", "rows", n)
@@ -131,12 +136,48 @@ func setup(ctx context.Context, c config, log *slog.Logger) (*deps, error) {
 		}
 		brands = append(brands, br.Name)
 	}
-	src := &brandoff.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands}
-	cr := &crawl.Crawler{Store: st, Source: src, Log: log, MaxPages: c.maxPages, DetailBudget: c.details}
+	available := map[string]crawl.Source{
+		brandoff.SourceName: &brandoff.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
+		grare.SourceName:    &grare.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
+		allu.SourceName:     &allu.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
+	}
+	var sources []crawl.Source
+	for n := range strings.SplitSeq(c.sources, ",") {
+		src, ok := available[strings.TrimSpace(n)]
+		if !ok {
+			return nil, fmt.Errorf("unknown source %q", strings.TrimSpace(n))
+		}
+		sources = append(sources, src)
+	}
+	if err := checkSources(sources); err != nil {
+		return nil, err
+	}
+	cr := &crawl.Crawler{Store: st, Sources: sources, Log: log, MaxPages: c.maxPages, DetailBudget: c.details,
+		RecheckAfter: c.recheckAfter}
 	return &deps{store: st, fx: conv, crawler: cr}, nil
 }
 
-// crawlOnce refreshes FX then sweeps every brand.
+// checkSources refuses a source list the crawler and radar can't keep apart.
+func checkSources(sources []crawl.Source) error {
+	names := map[string]bool{}
+	for _, src := range sources {
+		// Each shop's grades are shown in its own scale with its own
+		// definitions; a source without a registered scheme would be
+		// relabelled into another shop's or shown without one.
+		if _, ok := listing.SchemeFor(src.Name()); !ok {
+			return fmt.Errorf("source %q has no registered condition scheme", src.Name())
+		}
+		// Listing ids are "<source>:<id>": two adapters with one name would
+		// overwrite each other's rows.
+		if names[src.Name()] {
+			return fmt.Errorf("duplicate source %q", src.Name())
+		}
+		names[src.Name()] = true
+	}
+	return nil
+}
+
+// crawlOnce refreshes FX then sweeps every source's brands.
 func (d *deps) crawlOnce(log *slog.Logger) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if err := d.fx.Refresh(ctx); err != nil {

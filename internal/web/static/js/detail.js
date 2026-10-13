@@ -45,7 +45,7 @@ export async function renderDetail(main, ov, rawId) {
   <div class="k-detail__col">
     ${specsHTML(it, sold)}
     ${sold ? "" : fairHTML(it, v, name, ov.method)}
-    ${group ? distHTML({ stats: group.model, items: group.items, scheme, thisId: it.id }) : ""}
+    ${group ? distHTML({ stats: group.model, items: group.items, schemes: group.schemes, thisId: it.id }) : ""}
     <section class="k-dsec k-dsec--last" aria-labelledby="hist-h"><h2 id="hist-h">售價變化</h2>${historyHTML(it, sold)}</section>
   </div>
 </div>`;
@@ -139,7 +139,7 @@ function fairHTML(it, v, name, m) {
     const n = esc(name);
     let s = f.method === "same-grade"
       ? `同一家店、同樣是 ${g} 的 ${n}，目前有 ${f.comps} 件可以比較，中位數是 <strong>${twd(f.fair_twd)}</strong>。`
-      : `同一家店、同樣是 ${g} 的 ${n} 不到 ${m.min_comps} 件，所以把同型號各等級的 ${f.comps} 件換算到 ${g} 來比較，估計行情是 <strong>${twd(f.fair_twd)}</strong>。`;
+      : `同一家店、同樣是 ${g} 的 ${n} 不到 ${m.min_comps} 件，所以把同型號在各家店、各等級的 ${f.comps} 件換算到 ${g} 來比較，估計行情是 <strong>${twd(f.fair_twd)}</strong>。`;
     if (v.state === "anomaly") s += `價格比同型號同成色的行情低超過 ${pct(m.anomaly_pct)}%，通常代表有標題沒寫的瑕疵、缺件或版本差異，購買前請務必確認商品頁的照片與備註。`;
     else if (v.state === "below" || v.state === "low") s += `這件比它低 ${v.pct}%，約省 ${twd(f.fair_twd - it.price_twd)}。`;
     else if (v.state === "above") s += `這件比它高 ${v.pct}%。`;

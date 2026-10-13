@@ -29,8 +29,9 @@ func TestParseList(t *testing.T) {
 	if p.Total < 1000 {
 		t.Errorf("Total = %d, want the site-wide hit count (thousands)", p.Total)
 	}
-	if len(p.Cards) != 90 {
-		t.Fatalf("got %d cards, want 90", len(p.Cards))
+	// 90 tiles: 83 for sale, 7 marked SOLDOUT.
+	if len(p.Cards) != 83 || len(p.Sold) != 7 {
+		t.Fatalf("got %d cards, %d sold; want 83, 7", len(p.Cards), len(p.Sold))
 	}
 	var bags int
 	for _, c := range p.Cards {
@@ -76,6 +77,35 @@ func TestParseList(t *testing.T) {
 	}
 	if got.URL != "https://www.brandoff-store.com/Form/Product/ProductDetail.aspx?cat=100104&pid=2101220315016&shop=0" {
 		t.Errorf("URL = %s", got.URL)
+	}
+}
+
+func TestParseListSold(t *testing.T) {
+	p := parseFixture(t, "list_lv.html")
+	soldBags := map[string]bool{
+		"2101220306854": true, "2118400254263": true, "2101220320522": true,
+		"2107601195543": true, "2100301266889": true, "2100301259737": true,
+	}
+	const soldOther = "2121400023012" // cat 115100, not a bag
+	got := map[string]bool{}
+	for _, c := range p.Sold {
+		got[c.SourceID] = true
+		if c.IsBag() != soldBags[c.SourceID] {
+			t.Errorf("sold %s: IsBag %v (cat %q)", c.SourceID, c.IsBag(), c.CategoryID)
+		}
+	}
+	if len(got) != 7 || !got[soldOther] {
+		t.Errorf("sold ids %v; want the 6 bags and %s", got, soldOther)
+	}
+	for id := range soldBags {
+		if !got[id] {
+			t.Errorf("sold bag %s missing", id)
+		}
+	}
+	for _, c := range p.Cards {
+		if got[c.SourceID] {
+			t.Errorf("sold tile %s also parsed as a card", c.SourceID)
+		}
 	}
 }
 

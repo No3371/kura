@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -110,6 +111,107 @@ func TestPendingDetailsPriority(t *testing.T) {
 	}
 }
 
+func TestMarkGoneOnlyActive(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	day := func(n int) time.Time { return time.Date(2026, 10, n, 0, 0, 0, 0, time.UTC) }
+	if _, err := s.RecordSeen(ctx, "HERMES", item("a", 100), day(1)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.MarkGone(ctx, "src:a", day(2)); err != nil || !ok {
+		t.Fatalf("first MarkGone = %v, %v; want true", ok, err)
+	}
+	if ok, err := s.MarkGone(ctx, "src:a", day(3)); err != nil || ok {
+		t.Fatalf("repeated MarkGone = %v, %v; want false", ok, err)
+	}
+	if ok, err := s.MarkGone(ctx, "src:nosuch", day(2)); err != nil || ok {
+		t.Fatalf("MarkGone of an unknown id = %v, %v; want false, nil", ok, err)
+	}
+	rows, err := s.AllRows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != "gone" || !rows[0].GoneAt.Equal(day(2)) {
+		t.Fatalf("rows = %+v, want one gone row with gone_at day 2", rows)
+	}
+
+	// Relisted: active again, and its product page is still to be read.
+	if _, err := s.RecordSeen(ctx, "HERMES", item("a", 100), day(4)); err != nil {
+		t.Fatal(err)
+	}
+	todo, err := s.PendingDetails(ctx, "src", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todo) != 1 || todo[0].ID != "src:a" {
+		t.Errorf("pending after relisting = %v, want src:a", todo)
+	}
+}
+
+func TestRecheckDue(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	day := func(n int) time.Time { return time.Date(2026, 10, n, 0, 0, 0, 0, time.UTC) }
+	seen := func(target, id string, at time.Time) {
+		t.Helper()
+		l := item(id, 100)
+		l.Brand = target
+		if _, err := s.RecordSeen(ctx, target, l, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func(id string, at time.Time) {
+		t.Helper()
+		if err := s.SaveDetail(ctx, "src:"+id, listing.Detail{Color: "c"}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen("HERMES", "a", day(1))
+	read("a", day(1))
+	seen("HERMES", "b", day(1))
+	read("b", day(2))
+	seen("HERMES", "c", day(1)) // never read: PendingDetails'
+	seen("HERMES", "d", day(1))
+	read("d", day(1))
+	seen("HERMES", "d", day(3)) // shown by a list page since seenBefore
+	seen("CHANEL", "e", day(1))
+	read("e", day(1))
+	seen("HERMES", "f", day(1))
+	read("f", day(1))
+	if _, err := s.MarkGone(ctx, "src:f", day(2)); err != nil {
+		t.Fatal(err)
+	}
+	seen("HERMES", "g", day(1))
+	read("g", day(3)) // read too recently
+
+	due := func(targets []string, limit int) []string {
+		t.Helper()
+		todo, err := s.RecheckDue(ctx, "src", targets, day(3), day(3), limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, d := range todo {
+			ids = append(ids, d.ID)
+		}
+		return ids
+	}
+	for _, c := range []struct {
+		targets []string
+		limit   int
+		want    []string
+	}{
+		{[]string{"HERMES"}, 10, []string{"src:a", "src:b"}},
+		{[]string{"HERMES"}, 1, []string{"src:a"}},
+		{[]string{"HERMES", "CHANEL"}, 10, []string{"src:a", "src:e", "src:b"}},
+		{nil, 10, nil},
+	} {
+		if got := due(c.targets, c.limit); !slices.Equal(got, c.want) {
+			t.Errorf("RecheckDue(%v, limit %d) = %v, want %v", c.targets, c.limit, got, c.want)
+		}
+	}
+}
+
 func TestMigrateAddsGradeAndBackfills(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "old.db")
@@ -177,5 +279,72 @@ func TestSaveDetailOverridesModelCode(t *testing.T) {
 	}
 	if todo, _ := s.PendingDetails(ctx, "src", 10); len(todo) != 0 {
 		t.Errorf("still pending after SaveDetail: %v", todo)
+	}
+}
+
+func TestOnboarded(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	day := func(n int) time.Time { return time.Date(2026, 10, n, 0, 0, 0, 0, time.UTC) }
+	sweep := func(source, target string, at time.Time, complete bool) {
+		t.Helper()
+		id, err := s.StartRun(ctx, source, target, at.Add(-time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.FinishRun(ctx, Run{ID: id, FinishedAt: at, Complete: complete}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	onboarded := func() map[Pair]time.Time {
+		t.Helper()
+		m, err := s.Onboarded(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	version := func() string {
+		t.Helper()
+		v, err := s.Version(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	hermes := Pair{"src", "HERMES"}
+
+	if m := onboarded(); len(m) != 0 {
+		t.Fatalf("empty store onboarded = %v", m)
+	}
+	v0 := version()
+	sweep("src", "HERMES", day(1), false) // capped or failed: saw part of the catalogue
+	if m := onboarded(); len(m) != 0 {
+		t.Fatalf("after incomplete sweep onboarded = %v", m)
+	}
+	if v := version(); v != v0 {
+		t.Errorf("incomplete sweep changed version %q -> %q", v0, v)
+	}
+	sweep("src", "HERMES", day(2), true)
+	if got := onboarded()[hermes]; !got.Equal(day(2)) {
+		t.Errorf("onboarded HERMES = %v, want %v", got, day(2))
+	}
+	if v := version(); v == v0 {
+		t.Errorf("complete sweep left version at %q", v)
+	}
+	sweep("src", "HERMES", day(3), true)
+	if got := onboarded()[hermes]; !got.Equal(day(2)) {
+		t.Errorf("onboarded HERMES after later sweep = %v, want first %v", got, day(2))
+	}
+	if _, err := s.StartRun(ctx, "src", "CHANEL", day(3)); err != nil { // process killed mid-sweep
+		t.Fatal(err)
+	}
+	sweep("other", "HERMES", day(4), true)
+	m := onboarded()
+	if _, ok := m[Pair{"src", "CHANEL"}]; ok {
+		t.Errorf("unfinished sweep counted as onboarding: %v", m)
+	}
+	if got := m[Pair{"other", "HERMES"}]; !got.Equal(day(4)) || len(m) != 2 {
+		t.Errorf("onboarded = %v, want src/HERMES day 2 and other/HERMES day 4", m)
 	}
 }

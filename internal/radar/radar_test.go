@@ -33,9 +33,15 @@ func row(id string, code string, rank listing.Rank, price int64, firstDay int, p
 	return r
 }
 
+// engine builds an index whose source "t" finished its first complete sweep a
+// day after t0: rows first seen later are ones Kura watched appear.
 func engine(rows ...store.Row) *Engine {
+	return engineAt(map[store.Pair]time.Time{{Source: "t"}: t0.Add(24 * time.Hour)}, rows...)
+}
+
+func engineAt(onboarded map[store.Pair]time.Time, rows ...store.Row) *Engine {
 	e := &Engine{FX: &fx.Converter{Fallback: 0.2}, Now: func() time.Time { return t0.AddDate(0, 1, 0) }}
-	e.build(rows, "test")
+	e.build(rows, onboarded, "test")
 	return e
 }
 
@@ -275,6 +281,60 @@ func TestNewestOrder(t *testing.T) {
 	}
 	if got, _ := e.Search(Filter{Sort: "newest", Limit: 1}); len(got) != 1 || got[0].ID != "t:i1" {
 		t.Errorf("first sweep newest = %v, want [t:i1]", ids(got))
+	}
+}
+
+func TestWatchedPerSourceOnboarding(t *testing.T) {
+	// Source u starts being crawled ten days after source t. Under one global
+	// epoch (t0 + 24 h) u's whole initial sweep (u:i1, u:i2, u:ig) would read
+	// as watched; each pair's own first complete sweep is its baseline instead.
+	day := func(n int) time.Time { return t0.AddDate(0, 0, n) }
+	at := func(source, id, target string, first time.Time) store.Row {
+		r := row(id, "M40156", listing.RankA, 100000, 0)
+		r.Source, r.ID, r.Target, r.FirstSeen = source, source+":"+id, target, first
+		return r
+	}
+	gone := func(r store.Row, goneAt time.Time) store.Row {
+		r.Status, r.GoneAt = "gone", goneAt
+		return r
+	}
+	e := engineAt(map[store.Pair]time.Time{
+		{Source: "t", Target: "LV"}: t0.Add(time.Hour),
+		{Source: "u", Target: "LV"}: day(10).Add(time.Hour),
+		// {u, HERMES}: only incomplete sweeps so far, no baseline.
+	},
+		at("t", "i", "LV", t0),
+		at("t", "w", "LV", day(5)),
+		at("u", "i1", "LV", day(10)),
+		at("u", "i2", "LV", day(10).Add(30*time.Minute)),
+		// First seen in the very second u's first complete sweep finished:
+		// still that sweep's stock, not watched.
+		at("u", "ib", "LV", day(10).Add(time.Hour)),
+		at("u", "w", "LV", day(12)),
+		at("u", "x", "HERMES", day(12)),
+		gone(at("u", "ig", "LV", day(10)), day(11)),
+		gone(at("u", "wg", "LV", day(12)), day(15)),
+	)
+
+	var ids []string
+	got, _ := e.Search(Filter{Sort: "newest"})
+	for _, it := range got {
+		ids = append(ids, it.ID)
+	}
+	if want := []string{"u:w", "t:w", "t:i", "u:i1", "u:i2", "u:ib", "u:x"}; !slices.Equal(ids, want) {
+		t.Errorf("newest = %v, want %v", ids, want)
+	}
+	s, items, ok := e.Model("LOUIS VUITTON", "M40156")
+	if !ok {
+		t.Fatal("model not indexed")
+	}
+	if n := e.NewestActive(items); n == nil || n.ID != "u:w" {
+		t.Errorf("NewestActive = %+v, want u:w", n)
+	}
+	// Only u:wg (listed day 12, gone day 15) was seen being listed; the global
+	// epoch would also count u:ig and give median(1, 3) = 2.
+	if s.MedianDaysToSell == nil || *s.MedianDaysToSell != 3 {
+		t.Errorf("MedianDaysToSell = %v, want 3", s.MedianDaysToSell)
 	}
 }
 

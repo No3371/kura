@@ -27,7 +27,7 @@ export async function renderModel(main, ov, rawBrand, rawKey) {
   } catch {
     throw Object.assign(new Error("bad model path"), { status: 404 });
   }
-  const { model: s, items, scheme, seekers } = await api(`/api/models/${encodeURIComponent(brand)}/${encodeURIComponent(key)}`);
+  const { model: s, items, schemes, seekers } = await api(`/api/models/${encodeURIComponent(brand)}/${encodeURIComponent(key)}`);
 
   const name = s.model_name || s.model_code || key;
   const brandZH = ov.brands?.find((b) => b.name === s.brand)?.zh;
@@ -43,7 +43,7 @@ export async function renderModel(main, ov, rawBrand, rawKey) {
   // "model"; a separate store per kind would split one 追蹤 list in two.
   const trackKey = `model:${s.brand}/${s.group_key}`;
   const on = isTracked(trackKey);
-  const dist = distHTML({ stats: s, items, scheme });
+  const dist = distHTML({ stats: s, items, schemes });
 
   main.innerHTML = `<div class="k-model">
   <nav aria-label="位置" class="k-crumb"><a href="/" class="k-link">首頁</a><span aria-hidden="true">/</span><span class="k-crumb__model" aria-current="page">${esc(s.brand)} ${esc(name)}</span></nav>

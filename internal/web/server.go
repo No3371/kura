@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -232,12 +233,23 @@ func (s *Server) model(r *http.Request) (any, int, error) {
 	// seekers is seeded demand (wanted.go), apart from the stats so the
 	// advisor, which reads ModelStats, never takes it for data.
 	res := map[string]any{"model": stats, "items": items, "seekers": s.modelSeekers(stats)}
-	// A group holds one shop's listings while a single provider is ingested,
-	// so its first item names the ladder. With several shops the distribution
-	// needs one ladder per shop, not this single field.
-	if sc, ok := listing.SchemeFor(items[0].Source); ok {
-		res["scheme"] = sc
+	// One ladder per shop in the group: grades are only comparable within a shop.
+	// Starts as [], not nil: a nil slice encodes as null, and distHTML's
+	// `schemes = []` default replaces only undefined, so null would throw on
+	// schemes.filter while rendering the model and listing pages.
+	schemes := []listing.Scheme{}
+	seen := map[string]bool{}
+	for _, it := range items {
+		if seen[it.Source] {
+			continue
+		}
+		seen[it.Source] = true
+		if sc, ok := listing.SchemeFor(it.Source); ok {
+			schemes = append(schemes, sc)
+		}
 	}
+	slices.SortFunc(schemes, func(a, b listing.Scheme) int { return strings.Compare(a.Source, b.Source) })
+	res["schemes"] = schemes
 	return res, 0, nil
 }
 

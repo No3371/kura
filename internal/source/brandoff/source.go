@@ -13,10 +13,11 @@ import (
 	"github.com/No3371/kura/internal/listing"
 )
 
-const (
-	baseURL  = "https://www.brandoff-store.com"
-	pageSize = 90 // the largest page size the site offers
-)
+const pageSize = 90 // the largest page size the site offers
+
+// baseURL is a variable, not a constant, only so tests can point the sweeper
+// at a local server; nothing else assigns it.
+var baseURL = "https://www.brandoff-store.com"
 
 // Source sweeps BRAND OFF brand catalogues. Targets are canonical brand names
 // (see listing.Brands); the site's search parameter uses the katakana name.
@@ -48,7 +49,13 @@ func listURL(brandJA string, offset int) string {
 	return baseURL + "/Form/Product/ProductList.aspx?" + q.Encode()
 }
 
-func (s *Source) Sweep(ctx context.Context, target string, maxPages int, visit func(int, []listing.Listing) error) (bool, error) {
+// Sweep pages through target's catalogue, newest first, until a short page or
+// the site's hit count ends it. Tiles the page marks SOLDOUT (ListPage.Sold)
+// go to visit as sold ids, bags only — only bags are ever held. A page's row
+// count includes its sold tiles: counting only the cards would read a full
+// page holding sold tiles as the last page, report the sweep complete early,
+// and let store.SweepMissing count every listing past that page as missed.
+func (s *Source) Sweep(ctx context.Context, target string, maxPages int, visit func(int, []listing.Listing, []string) error) (bool, error) {
 	brand, ok := listing.BrandByName(target)
 	if !ok {
 		return false, fmt.Errorf("brandoff: unknown brand %q", target)
@@ -85,10 +92,17 @@ func (s *Source) Sweep(ctx context.Context, target string, maxPages int, visit f
 			}
 			bags = append(bags, c.Listing)
 		}
-		if err := visit(page, bags); err != nil {
+		var sold []string
+		for _, c := range lp.Sold {
+			if c.IsBag() {
+				sold = append(sold, c.SourceID)
+			}
+		}
+		if err := visit(page, bags, sold); err != nil {
 			return false, err
 		}
-		if len(lp.Cards) < pageSize || offset+len(lp.Cards) >= total {
+		rows := len(lp.Cards) + len(lp.Sold)
+		if rows < pageSize || offset+rows >= total {
 			return true, nil
 		}
 	}

@@ -71,7 +71,7 @@ func TestWantedAPI(t *testing.T) {
 			seen(fmt.Sprint("m", m), fmt.Sprintf("m%d-%d", m, i), int64(100000+1000*i))
 		}
 	}
-	if err := st.MarkGone(ctx, "wt:m1-0", t0.Add(time.Hour)); err != nil {
+	if _, err := st.MarkGone(ctx, "wt:m1-0", t0.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 

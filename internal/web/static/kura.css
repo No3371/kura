@@ -393,6 +393,10 @@ body { margin: 0; background: var(--k-paper); color: var(--k-ink); font-family: 
 .k-dist__table .def { color: var(--k-ink-2); }
 .k-dist__table .num { text-align: right; }
 .k-dist__table tr > :last-child { padding-right: 0; }
+.k-dist__shop { font-size: 15px; font-weight: 600; color: var(--k-ink); margin: 18px 0 8px; }
+.k-dist__shop small { font-size: 12px; font-weight: 400; color: var(--k-ink-3); }
+.k-dist__chart + .k-dist__chart { margin-top: 20px; }
+.k-dist__table th[scope="colgroup"] { text-align: left; color: var(--k-ink-2); padding-top: 16px; }
 
 /* 售價變化 */
 .k-hist { position: relative; height: 56px; margin: 0 8px; }
