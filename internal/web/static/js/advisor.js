@@ -292,14 +292,11 @@ function figure(it) {
   const shop = it.source_name || it.source;
   const on = isTracked(it.id);
   const c = it.condition ?? {};
-  const mat = it.photo_pending
-    ? `${PENDING_ICON}<span class="k-card__pending">店家照片準備中</span>`
-    : `<img src="${esc(it.image_url)}" alt="${esc(name)} 商品照片（店家白底照）" loading="lazy">`;
   const grade = c.label
     ? `<span class="k-adv__grade"><span class="k-grade">${esc(c.label)}</span>${esc(c.desc_zh)}</span>`
     : "";
   return `<figure class="k-adv__rec" aria-label="推薦：${esc(name)}${it.model_code ? " " + esc(it.model_code) : ""}">
-  <a class="k-adv__mat" href="${href}" tabindex="-1" aria-hidden="true">${mat}</a>
+  ${galleryHTML(it, name, href)}
   <div class="k-adv__recmeta">
     <div class="k-adv__recid"><span class="k-adv__brand">${esc(it.brand)}</span><a class="k-adv__name k-link" href="${href}">${esc(name)}</a>${grade}</div>
     <div class="k-adv__recprice"><span class="k-price">${twd(it.price_twd)}</span>${badgeHTML(valuation(it))}</div>
@@ -312,6 +309,66 @@ function figure(it) {
   </div>
 </figure>`;
 }
+
+// galleryHTML is a figure's photo: the stored gallery when there is one, else
+// the list-page photo alone, as on the detail page. Two or more photos become
+// a scroll-snapped strip — swiped on touch, paged by the arrow buttons — with
+// a counter; one photo stays a plain mat. Every photo links to the listing.
+// A lone photo's link is hidden from assistive tech, as the name link already
+// leads there; a strip's photos stay exposed, each alt saying which of n it is,
+// so the arrow buttons page through something a screen reader can read.
+function galleryHTML(it, name, href) {
+  const photos = it.images?.length ? it.images : it.photo_pending ? [] : [it.image_url];
+  if (!photos.length) {
+    return `<a class="k-adv__mat" href="${href}" tabindex="-1" aria-hidden="true">${PENDING_ICON}<span class="k-card__pending">店家照片準備中</span></a>`;
+  }
+  if (photos.length < 2) {
+    return `<a class="k-adv__mat" href="${href}" tabindex="-1" aria-hidden="true"><img src="${esc(photos[0])}" alt="${esc(name)} 商品照片（店家白底照）" loading="lazy"></a>`;
+  }
+  const n = photos.length;
+  const slides = photos
+    .map((u, i) => `<a class="k-adv__mat" href="${href}" tabindex="-1"><img src="${esc(u)}" alt="${esc(name)} 商品照片 ${i + 1}／${n}" loading="lazy"></a>`)
+    .join("");
+  return `<div class="k-adv__gal" data-adv-gal>
+    <div class="k-adv__slides">${slides}</div>
+    <button type="button" class="k-adv__nav k-adv__nav--prev" data-adv-step="-1" aria-label="上一張照片" disabled>${CHEVRON}</button>
+    <button type="button" class="k-adv__nav k-adv__nav--next" data-adv-step="1" aria-label="下一張照片">${CHEVRON}</button>
+    <span class="k-adv__count" aria-hidden="true"><span data-adv-at>1</span>／${n}</span>
+  </div>`;
+}
+
+const CHEVRON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const calm = matchMedia("(prefers-reduced-motion: reduce)");
+
+// The strip's page index, from its scroll position.
+const page = (strip) => Math.round(strip.scrollLeft / strip.clientWidth);
+
+log.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-adv-step]");
+  if (!b) return;
+  const strip = b.closest("[data-adv-gal]").querySelector(".k-adv__slides");
+  // A second click during a smooth scroll steps from the page it is headed
+  // to; reading the half-scrolled position would round back and lose a step.
+  const from = strip.dataset.to ? Number(strip.dataset.to) : page(strip);
+  const to = Math.min(Math.max(from + Number(b.dataset.advStep), 0), strip.children.length - 1);
+  strip.dataset.to = to;
+  strip.scrollTo({ left: to * strip.clientWidth, behavior: calm.matches ? "auto" : "smooth" });
+});
+
+// scroll does not bubble; capturing it here covers every strip in the log,
+// swiped or paged, and keeps the counter and arrows in step with it.
+log.addEventListener("scroll", (e) => {
+  const strip = e.target;
+  if (!strip.classList?.contains("k-adv__slides")) return;
+  const g = strip.closest("[data-adv-gal]");
+  const at = page(strip);
+  const last = strip.children.length - 1;
+  // Settled on a page: the paged scroll is over, or a swipe took over.
+  if (Math.abs(strip.scrollLeft - at * strip.clientWidth) < 1) delete strip.dataset.to;
+  g.querySelector("[data-adv-at]").textContent = at + 1;
+  g.querySelector(".k-adv__nav--prev").disabled = at <= 0;
+  g.querySelector(".k-adv__nav--next").disabled = at >= last;
+}, true);
 
 // Model responses per brand|group_key for the page lifetime. A failed fetch
 // is dropped from the cache so a later turn can retry it.

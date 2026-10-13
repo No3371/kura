@@ -598,11 +598,37 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
 @keyframes k-blink { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .k-adv__cursor { animation: none; } }
 .k-adv__err { margin: 0; color: var(--k-ink-2); }
-.k-adv__rec { margin: 4px 0; display: flex; flex-direction: column; gap: 14px; }
-.k-adv__mat { width: min(240px, 100%); aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
+/* Each recommendation is a card, so where one listing ends and the next
+   begins reads at a glance when an answer names several. The answer is the
+   size container: the floating and full panels lay the card out photo-left,
+   the phone panel stacks it. */
+.k-adv__answer { container-type: inline-size; }
+.k-adv__rec { --k-rec-bg: var(--k-paper); margin: 4px 0; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px;
+  background: var(--k-rec-bg); border: 1px solid var(--k-rule); border-radius: var(--k-radius-2); }
+.k-adv__rec + .k-adv__rec { margin-top: 0; }
+/* 4:3 when stacked keeps a phone card's photo from filling the panel. */
+.k-adv__mat { width: 100%; aspect-ratio: 4 / 3; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
   box-shadow: inset 0 0 0 6px var(--k-mat), inset 0 0 0 7px var(--k-mat-line);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); text-decoration: none; }
 .k-adv__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-adv__gal { position: relative; min-width: 0; }
+.k-adv__slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.k-adv__slides::-webkit-scrollbar { display: none; }
+.k-adv__slides > .k-adv__mat { flex: none; scroll-snap-align: start; scroll-snap-stop: always; }
+/* Paging arrows sit on the mat's edges; at either end the spent one fades
+   out rather than leaving a dead control on the photo. */
+.k-adv__nav { position: absolute; top: 50%; width: 32px; height: 32px; margin-top: -16px; padding: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--k-ink); background: var(--k-surface); border: 1px solid var(--k-rule-strong); border-radius: 50%; box-shadow: var(--k-shadow); cursor: pointer;
+  transition: opacity .15s; }
+.k-adv__nav svg { width: 14px; height: 14px; }
+.k-adv__nav--prev { left: 8px; }
+.k-adv__nav--prev svg { transform: scaleX(-1); }
+.k-adv__nav--next { right: 8px; }
+.k-adv__nav:disabled { opacity: 0; pointer-events: none; }
+.k-adv__nav:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 2px; }
+.k-adv__count { position: absolute; right: 8px; bottom: 8px; padding: 0 7px; font-size: 11px; line-height: 18px; color: var(--k-mat-note);
+  background: var(--k-mat); border: 1px solid var(--k-mat-line); border-radius: 999px; font-variant-numeric: tabular-nums; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .k-adv__nav { transition: none; } }
 .k-adv__recmeta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 10px 20px; }
 .k-adv__recid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .k-adv__brand { font-family: var(--k-font-num); font-size: 12px; letter-spacing: .16em; color: var(--k-ink-3); }
@@ -618,7 +644,7 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
 .k-adv__track { position: relative; height: 18px; }
 .k-adv__track::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--k-rule-strong); }
 .k-adv__med { position: absolute; top: 2px; width: 2px; height: 14px; margin-left: -1px; background: var(--k-ink); }
-.k-adv__this { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--k-accent-ink); box-shadow: 0 0 0 2px var(--k-surface); }
+.k-adv__this { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--k-accent-ink); box-shadow: 0 0 0 2px var(--k-rec-bg, var(--k-surface)); }
 .k-adv__ticks, .k-adv__medrow { position: relative; height: 16px; font-size: 11px; color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
 .k-adv__ticks > span, .k-adv__medrow > span { position: absolute; white-space: nowrap; }
 .k-adv__ticks > span:first-child { left: 0; }
@@ -636,6 +662,14 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
 .k-adv__btn[aria-pressed="true"] svg { fill: currentColor; }
 .k-adv__btn--shop { color: var(--k-on-accent); background: var(--k-accent); border-color: var(--k-accent); }
 .k-adv__btn--shop svg { width: 11px; height: 11px; }
+/* After the base rules above, which it overrides at equal specificity. */
+@container (min-width: 480px) {
+  .k-adv__rec { grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 20px; align-items: start; }
+  .k-adv__rec > .k-adv__mat, .k-adv__rec > .k-adv__gal { grid-row: 1 / span 3; }
+  .k-adv__recmeta { flex-direction: column; align-items: flex-start; }
+  .k-adv__acts { align-self: end; }
+  .k-adv__mat { aspect-ratio: 1 / 1; }
+}
 .k-adv__form { flex: none; border-top: 1px solid var(--k-rule); padding: 12px 12px 10px; }
 .k-adv__row { display: flex; gap: 8px; align-items: flex-end; }
 .k-adv__field { flex: 1 1 auto; display: flex; }
