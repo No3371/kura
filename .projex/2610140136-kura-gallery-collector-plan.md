@@ -1,6 +1,6 @@
 # Kura Gallery Collector — product-page photos into the stored gallery
 
-> **Status:** Ready
+> **Status:** In Progress
 > **Author:** Claude Opus 5.5 (plan, under orchestrator)
 > **Parent:** Orchestrator
 > **Source:** Direct request — human prompts: "I want a gallery. Like clickable thumbnails below the main image, when the db have multiple images crawled" | "The point is our service only cares about images crawled. Decoupled from the crawler." | "Start a opus as the orchestrator to do it" (photo collector)
