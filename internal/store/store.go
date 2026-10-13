@@ -471,6 +471,27 @@ func (s *Store) RecentRuns(ctx context.Context, limit int) ([]Run, error) {
 // Pair is one crawl target of one source.
 type Pair struct{ Source, Target string }
 
+// ScanStarts returns, per source and target, the start of every crawl run,
+// oldest first — the scans that can have first seen a listing. Unfinished and
+// failed runs count: whatever they recorded, they first saw.
+func (s *Store) ScanStarts(ctx context.Context) (map[Pair][]time.Time, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT source, target, started_at FROM crawl_runs ORDER BY started_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[Pair][]time.Time{}
+	for rows.Next() {
+		var p Pair
+		var at int64
+		if err := rows.Scan(&p.Source, &p.Target, &at); err != nil {
+			return nil, err
+		}
+		out[p] = append(out[p], time.Unix(at, 0))
+	}
+	return out, rows.Err()
+}
+
 // Onboarded returns, per source and target, when its first complete sweep
 // finished. Runs that stopped early (capped, failed, or never finished) are
 // not onboarding: they saw only part of the catalogue.

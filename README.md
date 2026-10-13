@@ -163,14 +163,18 @@ the moment of sale, and its price changes are seen only while it stays in the pa
 
 ### Newest listings
 最新上架 (Home's shelf, Browse's newest sort, the advisor's `newest`, the demo member's
-新上架) is one order. Listings Kura saw appear — first seen after the first complete sweep
-of their shop and brand — come first, latest first. The initial crawl's own first-seen times
-are only crawl order, and list pages are swept newest first, so among those listings the
-*earliest* first seen is the shop's newest (GALLERY RARE's page is in the shop's own order, so
-its listings keep only crawl order, and its first crawl's stock stays ahead of later
-arrivals). Listings first seen in the same second (about one list page) fall back to id
-order. A shop or brand added later starts with its own initial sweep, so its existing stock
-does not flood the order as new; until a shop's brand has had
+新上架) is one order: what Kura's latest scans found. Each listing belongs to the crawl run
+that first saw it, and the latest run comes first — a shop crawled today leads one last
+crawled two days ago, whether or not either has completed a sweep. Inside one run the shop's
+list order stands: BRAND OFF and ALLU are swept newest first, so a run's earliest first seen
+is that shop's newest; GALLERY RARE's page 1 is in the shop's own order. Listings first seen
+in the same second (about one list page) fall back to id order. 最新上架 therefore says what
+Kura found most recently, not when the shop listed it: a shop's first crawl takes in its
+whole catalogue at once.
+
+Days to sell is stricter: it counts only listings Kura saw appear — first seen after the
+first complete sweep of their shop and brand. A shop or brand added later starts with its own
+initial sweep, so its existing stock is not read as newly listed; until a shop's brand has had
 one complete sweep, none of its listings count as seen appearing. One gap remains: if items
 sell while that first sweep runs, later pages shift up and a listing can slip past unread; it
 is first seen on the next sweep and reads as newly listed. GALLERY RARE brands with more than
@@ -288,8 +292,8 @@ go test ./...
   40 bags per brand per crawl, so its listings' comparables lean on BRAND OFF through the
   rank bridge, at lower confidence. GALLERY RARE and ALLU never complete a sweep of a large
   brand, so sold status for their listings comes from product-page re-checks (and ALLU's
-  sold list rows) and can lag the sale by a re-check cycle, and 最新上架 relies on crawl
-  order. About a quarter of ALLU rows (mostly CHANEL, GOYARD, CELINE) have no model
+  sold list rows) and can lag the sale by a re-check cycle, and none of their listings
+  count toward days to sell. About a quarter of ALLU rows (mostly CHANEL, GOYARD, CELINE) have no model
   name or code and so no fair value; a title-derived model name would close part of that.
   ALLU's consigned items are kept as ALLU公式 stock; telling them apart needs a
   product-page check.

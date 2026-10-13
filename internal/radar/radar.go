@@ -129,6 +129,8 @@ type Item struct {
 	History         []PricePoint `json:"history,omitempty"`
 	// watched: Kura saw the listing appear (see watched).
 	watched bool
+	// scanAt: start of the crawl run that first saw the listing (see scanOf).
+	scanAt time.Time
 }
 
 // GradeStat is price by one source grade.
@@ -206,13 +208,17 @@ func (e *Engine) Refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.build(rows, onboarded, v)
+	scans, err := e.Store.ScanStarts(ctx)
+	if err != nil {
+		return err
+	}
+	e.build(rows, onboarded, scans, v)
 	return nil
 }
 
 func groupID(brand, key string) string { return brand + "|" + key }
 
-func (e *Engine) build(rows []store.Row, onboarded map[store.Pair]time.Time, version string) {
+func (e *Engine) build(rows []store.Row, onboarded map[store.Pair]time.Time, scans map[store.Pair][]time.Time, version string) {
 	now := e.now()
 	items := make([]*Item, 0, len(rows))
 	byID := make(map[string]*Item, len(rows))
@@ -222,6 +228,7 @@ func (e *Engine) build(rows []store.Row, onboarded map[store.Pair]time.Time, ver
 		r := &rows[i]
 		it := e.toItem(r, now)
 		it.watched = watched(r, onboarded)
+		it.scanAt = scanOf(r, scans)
 		items = append(items, it)
 		byID[it.ID] = it
 		if it.GroupKey != "" {
@@ -501,12 +508,11 @@ func dealScore(it *Item) float64 {
 // watched reports whether Kura saw r appear on its shop: first seen after its
 // own source and target finished onboarding — the end of that pair's first
 // complete sweep, which takes in the whole catalogue as already listed. Days
-// to sell and 最新上架 order both turn on it.
+// to sell turns on it (最新上架 orders by scan instead; see newer).
 // Rejected: one epoch for the whole database (earliest first_seen + 24 h). A
 // shop or brand Kura starts crawling later then has its entire initial sweep
-// read as newly listed, flooding 最新上架 and giving days to sell made-up
-// listing dates; and a listing that really appeared inside the 24 h sorts as
-// old stock. A pair with no complete sweep has no baseline, so nothing in it
+// read as newly listed, giving days to sell made-up listing dates; and a
+// listing that really appeared inside the 24 h reads as old stock. A pair with no complete sweep has no baseline, so nothing in it
 // is watched: a capped sweep reaches only the first list pages, and old stock
 // rises into them whenever newer listings above it sell.
 // Hazard: the same shift happens during the first complete sweep itself — a
@@ -519,32 +525,39 @@ func watched(r *store.Row, onboarded map[store.Pair]time.Time) bool {
 	return ok && r.FirstSeen.After(at)
 }
 
-// newer reports whether a was listed on its shop more recently than b — the
-// one 最新上架 order, used by sort=newest (Home's shelf, Browse, the advisor)
-// and the demo member's 新上架 pick. Listings Kura watched appear rank first,
-// latest first_seen first. Listings from their pair's initial sweep follow in
-// the opposite direction: their first_seen is only crawl order, and a source
-// that sweeps its list pages newest first (crawl.Source.Sweep; BRAND OFF's
-// sort=Number1) makes an earlier first_seen a newer listing. A source that
-// never completes a sweep of a brand (GALLERY RARE reads one page in the
-// shop's own order; ALLU reads at most ten pages newest first; so none of
-// those listings is ever watched) gets only crawl order: its first crawl's
-// stock stays ahead of items it first sees later.
-// Rejected: latest first_seen throughout — on a first sweep it surfaces the
-// deepest pages, the shop's oldest stock, as 最新上架. Within one second
-// (about a list page) the shop's order is lost; ties fall back to id so the
+// scanOf returns the start of the crawl run that first saw r: the latest run
+// of r's source and target that started at or before r.FirstSeen. With no run
+// recorded for the pair, r.FirstSeen stands in.
+func scanOf(r *store.Row, scans map[store.Pair][]time.Time) time.Time {
+	starts := scans[store.Pair{Source: r.Source, Target: r.Target}]
+	i := sort.Search(len(starts), func(i int) bool { return starts[i].After(r.FirstSeen) })
+	if i == 0 {
+		return r.FirstSeen
+	}
+	return starts[i-1]
+}
+
+// newer reports whether a comes before b in 最新上架 — what Kura's latest scans
+// found — used by sort=newest (Home's shelf, Browse, the advisor) and the demo
+// member's 新上架 pick. The crawl run that first saw a listing decides, latest
+// run first. Inside one run the shop's list order stands: an earlier
+// first_seen sits higher on the shop's list (BRAND OFF and ALLU page newest
+// first; GALLERY RARE reads its page 1 in the shop's own order). Within one
+// second (about a list page) that order is lost; ties fall back to id so the
 // order is stable across requests.
+// Rejected: watched listings first, then crawl order — a shop onboarded later
+// sank whole below the first shop's catalogue (ALLU's newest bags ranked after
+// all 15k BRAND OFF ones, which were two days older as scans). Rejected:
+// latest first_seen throughout — a full sweep's deepest pages, the shop's
+// oldest stock, would lead.
 func (e *Engine) newer(a, b *Item) bool {
-	wa, wb := a.watched, b.watched
 	switch {
-	case wa != wb:
-		return wa
-	case a.FirstSeen.Equal(b.FirstSeen):
-		return a.ID < b.ID
-	case wa:
-		return a.FirstSeen.After(b.FirstSeen)
-	default:
+	case !a.scanAt.Equal(b.scanAt):
+		return a.scanAt.After(b.scanAt)
+	case !a.FirstSeen.Equal(b.FirstSeen):
 		return a.FirstSeen.Before(b.FirstSeen)
+	default:
+		return a.ID < b.ID
 	}
 }
 

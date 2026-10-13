@@ -40,8 +40,12 @@ func engine(rows ...store.Row) *Engine {
 }
 
 func engineAt(onboarded map[store.Pair]time.Time, rows ...store.Row) *Engine {
+	return engineScans(onboarded, nil, rows...)
+}
+
+func engineScans(onboarded map[store.Pair]time.Time, scans map[store.Pair][]time.Time, rows ...store.Row) *Engine {
 	e := &Engine{FX: &fx.Converter{Fallback: 0.2}, Now: func() time.Time { return t0.AddDate(0, 1, 0) }}
-	e.build(rows, onboarded, "test")
+	e.build(rows, onboarded, scans, "test")
 	return e
 }
 
@@ -251,11 +255,13 @@ func TestNewestOrder(t *testing.T) {
 		r.FirstSeen = t0.Add(after)
 		return r
 	}
-	// The initial crawl pages newest first: i1 sits on an earlier page than
-	// i2, so it is the newer listing. w1 and w2 appeared after it.
+	// Scan 1 pages newest first: i1 sits on an earlier page than i2, so it
+	// ranks higher. Scans 2 and 3 found w1, then w2 and w3.
 	initial := []store.Row{at("i2", time.Hour), at("i1", 0), at("i1b", 0)}
 	gone := at("w3", 60*time.Hour)
 	gone.Status, gone.GoneAt = "gone", gone.FirstSeen.Add(time.Hour)
+	scans := map[store.Pair][]time.Time{{Source: "t"}: {t0, t0.Add(30 * time.Hour), t0.Add(50 * time.Hour)}}
+	engine := func(rows ...store.Row) *Engine { return engineScans(nil, scans, rows...) }
 	e := engine(append(initial, at("w1", 30*time.Hour), at("w2", 50*time.Hour), gone)...)
 
 	ids := func(items []Item) (out []string) {
@@ -281,6 +287,38 @@ func TestNewestOrder(t *testing.T) {
 	}
 	if got, _ := e.Search(Filter{Sort: "newest", Limit: 1}); len(got) != 1 || got[0].ID != "t:i1" {
 		t.Errorf("first sweep newest = %v, want [t:i1]", ids(got))
+	}
+}
+
+// A shop first crawled later leads 最新上架 with its scan's top listings, in
+// its list order, ahead of an older scan of another shop — whether or not
+// either shop ever completed a sweep.
+func TestNewestByScanAcrossShops(t *testing.T) {
+	day := func(n int) time.Time { return t0.AddDate(0, 0, n) }
+	at := func(source, id string, first time.Time) store.Row {
+		r := row(id, "M40156", listing.RankA, 100000, 0)
+		r.Source, r.ID, r.Target, r.FirstSeen = source, source+":"+id, "LV", first
+		return r
+	}
+	scans := map[store.Pair][]time.Time{
+		{Source: "t", Target: "LV"}: {t0},
+		{Source: "u", Target: "LV"}: {day(2)},
+		{Source: "v", Target: "LV"}: {day(2).Add(10 * time.Minute)},
+	}
+	e := engineScans(map[store.Pair]time.Time{{Source: "t", Target: "LV"}: t0.Add(time.Hour)}, scans,
+		at("t", "a", t0), at("t", "b", t0.Add(time.Minute)),
+		at("u", "a", day(2).Add(time.Second)), at("u", "b", day(2).Add(time.Minute)),
+		at("v", "a", day(2).Add(10*time.Minute)),
+		// No run recorded for w: its first_seen stands in as the scan.
+		func() store.Row { r := at("w", "a", day(1)); r.Target = "HERMES"; return r }(),
+	)
+	var ids []string
+	got, _ := e.Search(Filter{Sort: "newest"})
+	for _, it := range got {
+		ids = append(ids, it.ID)
+	}
+	if want := []string{"v:a", "u:a", "u:b", "w:a", "t:a", "t:b"}; !slices.Equal(ids, want) {
+		t.Errorf("newest = %v, want %v", ids, want)
 	}
 }
 
@@ -316,20 +354,9 @@ func TestWatchedPerSourceOnboarding(t *testing.T) {
 		gone(at("u", "wg", "LV", day(12)), day(15)),
 	)
 
-	var ids []string
-	got, _ := e.Search(Filter{Sort: "newest"})
-	for _, it := range got {
-		ids = append(ids, it.ID)
-	}
-	if want := []string{"u:w", "t:w", "t:i", "u:i1", "u:i2", "u:ib", "u:x"}; !slices.Equal(ids, want) {
-		t.Errorf("newest = %v, want %v", ids, want)
-	}
-	s, items, ok := e.Model("LOUIS VUITTON", "M40156")
+	s, _, ok := e.Model("LOUIS VUITTON", "M40156")
 	if !ok {
 		t.Fatal("model not indexed")
-	}
-	if n := e.NewestActive(items); n == nil || n.ID != "u:w" {
-		t.Errorf("NewestActive = %+v, want u:w", n)
 	}
 	// Only u:wg (listed day 12, gone day 15) was seen being listed; the global
 	// epoch would also count u:ig and give median(1, 3) = 2.

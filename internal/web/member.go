@@ -13,8 +13,7 @@ import (
 // from live listings, and every notification carries the same Item the
 // listing page shows. 降價 and 已找到新主人 are a price cut or sale the crawl
 // observed. 新上架 is the model's newest active listing in the radar's
-// 最新上架 order: a listing Kura watched appear when there is one, otherwise
-// the shop's newest from the initial crawl, which Kura never saw appear.
+// 最新上架 order: the top of the latest scan that found any of its listings.
 // Rejected: canned sample notifications — a price cut or sale invented for a
 // real, active listing would contradict that listing's own page.
 

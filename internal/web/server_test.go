@@ -322,6 +322,12 @@ func TestMemberAPI(t *testing.T) {
 	}
 	onboard("LOUIS VUITTON")
 	onboard("HERMES")
+	// The later scans that found wm:new and the price cut (capped: not complete).
+	for _, at := range []time.Time{t0.Add(25 * time.Hour), t0.Add(26 * time.Hour)} {
+		if _, err := st.StartRun(ctx, "wm", "LOUIS VUITTON", at); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	fxc := &fx.Converter{Fallback: 0.2}
 	h := (&Server{Store: st, Radar: &radar.Engine{Store: st, FX: fxc}, FX: fxc,
@@ -399,8 +405,8 @@ func TestMemberAPI(t *testing.T) {
 	if got, want := types(), []string{"drop wm:cut", "new " + m1Key, "new " + h1Key}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("events = %v, want %v (newest first)", got, want)
 	}
-	// 新上架 is the newest listing: the one Kura watched appear, else the
-	// shop's newest from the initial crawl, the first crawled.
+	// 新上架 is the newest listing: the top of the latest scan that found one —
+	// wm:new from the later scan, or for h1 the initial crawl's first crawled.
 	for i, id := range map[int]string{1: "wm:new", 2: "wm:hnew"} {
 		if ev := body.Events[i]; ev.Item.ID != id || !radar.IsDeal(&ev.Item) || !ev.At.Equal(ev.Item.FirstSeen) {
 			t.Errorf("new event %d = %s %+v, want %s", i, ev.Item.ID, ev, id)
