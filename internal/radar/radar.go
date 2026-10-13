@@ -92,18 +92,21 @@ type Item struct {
 	URL      string `json:"url"`
 	ImageURL string `json:"image_url"`
 	// PhotoPending: the source has no product photo yet.
-	PhotoPending bool   `json:"photo_pending,omitempty"`
-	Source       string `json:"source"`
-	SourceName   string `json:"source_name"` // the shop's display name
-	Brand        string `json:"brand"`
-	BrandZH      string `json:"brand_zh"`
-	Title        string `json:"title"`
-	ModelName    string `json:"model_name"`
-	ModelCode    string `json:"model_code,omitempty"`
-	GroupKey     string `json:"group_key"`
-	Category     string `json:"category"`
-	CategoryZH   string `json:"category_zh"`
-	Rank         string `json:"rank"` // internal scale, for filtering only
+	PhotoPending bool `json:"photo_pending,omitempty"`
+	// Images is the stored gallery in the shop's order (store.SetImages);
+	// absent when only the list-page photo (ImageURL) is known.
+	Images     []string `json:"images,omitempty"`
+	Source     string   `json:"source"`
+	SourceName string   `json:"source_name"` // the shop's display name
+	Brand      string   `json:"brand"`
+	BrandZH    string   `json:"brand_zh"`
+	Title      string   `json:"title"`
+	ModelName  string   `json:"model_name"`
+	ModelCode  string   `json:"model_code,omitempty"`
+	GroupKey   string   `json:"group_key"`
+	Category   string   `json:"category"`
+	CategoryZH string   `json:"category_zh"`
+	Rank       string   `json:"rank"` // internal scale, for filtering only
 	// Condition is the source's own grade with its definition text.
 	Condition listing.Grade `json:"condition"`
 	// ConditionScheme names the grading system and who applies it.
@@ -263,7 +266,7 @@ func (e *Engine) toItem(r *store.Row, now time.Time) *Item {
 	b, _ := listing.BrandByName(r.Brand)
 	scheme, _ := listing.SchemeFor(r.Source)
 	it := &Item{
-		ID: r.ID, URL: r.URL, ImageURL: r.ImageURL, PhotoPending: photoPending(r.ImageURL),
+		ID: r.ID, URL: r.URL, ImageURL: r.ImageURL, PhotoPending: photoPending(r.ImageURL), Images: r.Images,
 		Source: r.Source, SourceName: scheme.Shop,
 		Brand: r.Brand, BrandZH: b.ZH, Title: r.Title,
 		ModelName: r.ModelName, ModelCode: r.ModelCode, GroupKey: listing.GroupKey(r.ModelCode, r.ModelName),

@@ -98,6 +98,9 @@ type Row struct {
 	GoneAt       time.Time // zero while active
 	HasDetail    bool
 	PriceHistory []PricePoint
+	// Images is the listing's stored gallery in display order; empty when
+	// nothing collected more than the list-page photo (ImageURL).
+	Images []string
 }
 
 type PricePoint struct {
@@ -325,19 +328,65 @@ func (s *Store) AllRows(ctx context.Context) ([]Row, error) {
 			out[i].PriceHistory = append(out[i].PriceHistory, PricePoint{At: time.Unix(at, 0), PriceJPY: p})
 		}
 	}
-	return out, pts.Err()
+	if err := pts.Err(); err != nil {
+		return nil, err
+	}
+	imgs, err := s.db.QueryContext(ctx, `SELECT listing_id, url FROM listing_images ORDER BY listing_id, pos`)
+	if err != nil {
+		return nil, err
+	}
+	defer imgs.Close()
+	for imgs.Next() {
+		var id, url string
+		if err := imgs.Scan(&id, &url); err != nil {
+			return nil, err
+		}
+		if i, ok := idx[id]; ok {
+			out[i].Images = append(out[i].Images, url)
+		}
+	}
+	return out, imgs.Err()
+}
+
+// SetImages replaces listing id's gallery with urls, in order. Blank and
+// repeated URLs are dropped; an empty list clears the gallery.
+func (s *Store) SetImages(ctx context.Context, id string, urls []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM listing_images WHERE listing_id=?`, id); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	pos := 0
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u == "" || seen[u] {
+			continue
+		}
+		seen[u] = true
+		if _, err := tx.ExecContext(ctx, `INSERT INTO listing_images (listing_id, pos, url) VALUES (?, ?, ?)`, id, pos, u); err != nil {
+			return err
+		}
+		pos++
+	}
+	return tx.Commit()
 }
 
 // Version changes whenever listing data changes or a sweep completes (the
 // radar's watched rule reads complete sweeps); the radar uses it to decide when
-// to rebuild its in-memory index.
+// to rebuild its in-memory index. Galleries count by row total (a cleared
+// gallery) and highest id (a replaced one; ids never repeat).
 func (s *Store) Version(ctx context.Context) (string, error) {
-	var n, last, pts, runs int64
+	var n, last, pts, runs, imgs, imgID int64
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(last_seen),0) +
 		COALESCE(MAX(gone_at),0) + COALESCE(MAX(detail_at),0), (SELECT COUNT(*) FROM price_points),
-		(SELECT COUNT(*) FROM crawl_runs WHERE complete=1) FROM listings`).
-		Scan(&n, &last, &pts, &runs)
-	return fmt.Sprintf("%d/%d/%d/%d", n, last, pts, runs), err
+		(SELECT COUNT(*) FROM crawl_runs WHERE complete=1),
+		(SELECT COUNT(*) FROM listing_images), (SELECT COALESCE(MAX(id),0) FROM listing_images) FROM listings`).
+		Scan(&n, &last, &pts, &runs, &imgs, &imgID)
+	return fmt.Sprintf("%d/%d/%d/%d/%d/%d", n, last, pts, runs, imgs, imgID), err
 }
 
 // Run is one sweep of one crawl target.

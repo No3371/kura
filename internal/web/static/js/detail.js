@@ -61,12 +61,31 @@ function crumbHTML(it, name) {
   return `<nav aria-label="位置" class="k-crumb"><a href="/" class="k-link">首頁</a>${sep}${model}${tail ? `${sep}<span>${esc(tail)}</span>` : ""}</nav>`;
 }
 
+// The stored gallery when there is one, else the list-page photo alone.
+// Thumbnails appear only for two or more photos; one photo needs no picker.
 function photoHTML(it, name, sold) {
-  const inner = it.photo_pending
-    ? `${PENDING_ICON}<span class="k-card__pending">店家照片準備中</span>`
-    : `<img src="${esc(it.image_url)}" alt="${esc(name)} 商品照片（店家白底照）">`;
-  return `<div class="k-detail__mat${sold ? " is-sold" : ""}">${inner}</div>`;
+  const photos = it.images?.length ? it.images : it.photo_pending ? [] : [it.image_url];
+  const mat = (inner) => `<div class="k-detail__mat${sold ? " is-sold" : ""}">${inner}</div>`;
+  if (!photos.length) return mat(`${PENDING_ICON}<span class="k-card__pending">店家照片準備中</span>`);
+  const alt = (i) => `${esc(name)} 商品照片${photos.length > 1 ? ` ${i + 1}／${photos.length}` : "（店家白底照）"}`;
+  const main = mat(`<img src="${esc(photos[0])}" alt="${alt(0)}" data-gallery-main>`);
+  if (photos.length < 2) return main;
+  const thumbs = photos
+    .map((u, i) => `<li><button type="button" class="k-gallery__thumb" data-gallery-thumb="${i}" data-src="${esc(u)}" data-alt="${alt(i)}" aria-label="第 ${i + 1} 張照片" aria-current="${i === 0}"><img src="${esc(u)}" alt="" loading="lazy"></button></li>`)
+    .join("");
+  return `<div class="k-gallery">${main}<ul class="k-gallery__thumbs${sold ? " is-sold" : ""}" aria-label="商品照片">${thumbs}</ul></div>`;
 }
+
+// Document-level, as in browse.js: a listener per render would stack.
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-gallery-thumb]");
+  if (!b) return;
+  const g = b.closest(".k-gallery");
+  const img = g.querySelector("[data-gallery-main]");
+  img.src = b.dataset.src;
+  img.alt = b.dataset.alt;
+  for (const t of g.querySelectorAll("[data-gallery-thumb]")) t.setAttribute("aria-current", String(t === b));
+});
 
 function pricingHTML(it, v, sold) {
   const price = `<div class="k-detail__price">${sold ? `<span class="k-detail__lastsold">最後售價</span>` : ""}<span class="k-price">${twd(it.price_twd)}</span><span class="k-detail__jpy">${jpy(it.price_jpy)}</span></div>`;

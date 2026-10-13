@@ -132,6 +132,9 @@ func TestListingAPI(t *testing.T) {
 	if _, err := st.RecordSeen(context.Background(), "HERMES", l2, time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SetImages(context.Background(), l.ID(), []string{"g1", "g2"}); err != nil {
+		t.Fatal(err)
+	}
 	fxc := &fx.Converter{Fallback: 0.2}
 	h := (&Server{Store: st, Radar: &radar.Engine{Store: st, FX: fxc}, FX: fxc,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
@@ -154,6 +157,9 @@ func TestListingAPI(t *testing.T) {
 	}
 	if h := body.Item.History; len(h) != 1 || h[0].PriceTWD != 20000 {
 		t.Errorf("history = %+v", h)
+	}
+	if g := body.Item.Images; len(g) != 2 || g[0] != "g1" || g[1] != "g2" {
+		t.Errorf("images = %v", g)
 	}
 	if body.Model == nil || len(body.Model.ByGrade) != 1 || body.Model.ByGrade[0].MedianTWD != 20000 {
 		t.Errorf("model = %+v", body.Model)

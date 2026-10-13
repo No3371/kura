@@ -258,6 +258,71 @@ func TestMigrateAddsGradeAndBackfills(t *testing.T) {
 	}
 }
 
+func TestSetImages(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	a, b := item("a", 100), item("b", 100)
+	for _, l := range []listing.Listing{a, b} {
+		if _, err := s.RecordSeen(ctx, "HERMES", l, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	images := func() map[string][]string {
+		t.Helper()
+		rows, err := s.AllRows(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string][]string{}
+		for _, r := range rows {
+			m[r.ID] = r.Images
+		}
+		return m
+	}
+	version := func() string {
+		t.Helper()
+		v, err := s.Version(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	v0 := version()
+	if err := s.SetImages(ctx, a.ID(), []string{"p1", " ", "p2", "p1", "p3"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := images(); !slices.Equal(got[a.ID()], []string{"p1", "p2", "p3"}) || got[b.ID()] != nil {
+		t.Errorf("after set: %v", got)
+	}
+	v1 := version()
+	if v1 == v0 {
+		t.Error("Version unchanged after SetImages")
+	}
+
+	// Same count, different photos: Version must still move.
+	if err := s.SetImages(ctx, a.ID(), []string{"q1", "q2", "q3"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := images()[a.ID()]; !slices.Equal(got, []string{"q1", "q2", "q3"}) {
+		t.Errorf("after replace: %v", got)
+	}
+	v2 := version()
+	if v2 == v1 {
+		t.Error("Version unchanged after same-size replace")
+	}
+
+	if err := s.SetImages(ctx, a.ID(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := images()[a.ID()]; got != nil {
+		t.Errorf("after clear: %v", got)
+	}
+	if version() == v2 {
+		t.Error("Version unchanged after clear")
+	}
+}
+
 func TestSaveDetailOverridesModelCode(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
