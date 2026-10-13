@@ -23,10 +23,40 @@ import (
 )
 
 const (
-	minComps = 3
+	// MinComps is the fewest comparables a fair value is estimated from; with
+	// fewer, a listing has no valuation.
+	MinComps = 3
 	// Gone listings older than this stop counting as comparables.
 	compWindow = 180 * 24 * time.Hour
 )
+
+// DealMinPct is how far below fair value a listing must be priced to count as
+// a deal (IsDeal). AnomalyPct: priced further below fair value than this, a
+// listing is flagged Anomaly — half price against a solid comparable set is
+// rarely a bargain; it's usually damage or missing parts the title doesn't
+// mention.
+//
+// The site's 行情怎麼算 page, the detail page's 行情估價 prose and the advisor
+// prompt state these values from here (via the overview payload or the
+// constants themselves); copy that typed the numbers would keep describing the
+// old rule after a change here.
+const (
+	DealMinPct = 0.05
+	AnomalyPct = 0.5
+)
+
+// MinSoldHistory is how much crawl history the sold-derived figures (a model's
+// sold count, its days to sell) need before Kura states them; until then they
+// are unknown, not zero. Gating on "any listing has gone" instead flips every
+// model on the first sweep that marks one listing gone — most then read
+// "0 sold" as "never sells" — and a days-to-sell figure from a single sale
+// passes for a market figure. 14 days follows the design's own note that its
+// sample stats need about two weeks of history to be real.
+//
+// Provisional: what these figures show before then, per shop, and for models
+// mixing shops that Kura began crawling on different dates, is still
+// undecided. This constant is a placeholder for that rule, not the rule.
+const MinSoldHistory = 14 * 24 * time.Hour
 
 type Valuation struct {
 	FairJPY    int64   `json:"fair_jpy"`
@@ -42,45 +72,58 @@ type Valuation struct {
 type Drop struct {
 	FromJPY int64     `json:"from_jpy"`
 	ToJPY   int64     `json:"to_jpy"`
+	FromTWD int64     `json:"from_twd"`
+	ToTWD   int64     `json:"to_twd"`
 	Pct     float64   `json:"pct"`
 	At      time.Time `json:"at"`
 }
 
+// PricePoint is one observed asking price, converted once with the index's FX
+// rate so every consumer shows the same TWD figure.
+type PricePoint struct {
+	At       time.Time `json:"at"`
+	PriceJPY int64     `json:"price_jpy"`
+	PriceTWD int64     `json:"price_twd"`
+}
+
 // Item is the API/agent view of a listing.
 type Item struct {
-	ID         string `json:"id"`
-	URL        string `json:"url"`
-	ImageURL   string `json:"image_url"`
-	Source     string `json:"source"`
-	Brand      string `json:"brand"`
-	BrandZH    string `json:"brand_zh"`
-	Title      string `json:"title"`
-	ModelName  string `json:"model_name"`
-	ModelCode  string `json:"model_code,omitempty"`
-	GroupKey   string `json:"group_key"`
-	Category   string `json:"category"`
-	CategoryZH string `json:"category_zh"`
-	Rank       string `json:"rank"` // internal scale, for filtering only
+	ID       string `json:"id"`
+	URL      string `json:"url"`
+	ImageURL string `json:"image_url"`
+	// PhotoPending: the source has no product photo yet.
+	PhotoPending bool   `json:"photo_pending,omitempty"`
+	Source       string `json:"source"`
+	SourceName   string `json:"source_name"` // the shop's display name
+	Brand        string `json:"brand"`
+	BrandZH      string `json:"brand_zh"`
+	Title        string `json:"title"`
+	ModelName    string `json:"model_name"`
+	ModelCode    string `json:"model_code,omitempty"`
+	GroupKey     string `json:"group_key"`
+	Category     string `json:"category"`
+	CategoryZH   string `json:"category_zh"`
+	Rank         string `json:"rank"` // internal scale, for filtering only
 	// Condition is the source's own grade with its definition text.
 	Condition listing.Grade `json:"condition"`
 	// ConditionScheme names the grading system and who applies it.
-	ConditionScheme string             `json:"condition_scheme"`
-	ConditionBy     string             `json:"condition_by"`
-	PriceJPY        int64              `json:"price_jpy"`
-	PriceTWD        int64              `json:"price_twd"`
-	WasPriceJPY     int64              `json:"was_price_jpy,omitempty"`
-	Status          string             `json:"status"`
-	FirstSeen       time.Time          `json:"first_seen"`
-	GoneAt          *time.Time         `json:"gone_at,omitempty"`
-	DaysListed      int                `json:"days_listed"`
-	Color           string             `json:"color,omitempty"`
-	Material        string             `json:"material,omitempty"`
-	Size            string             `json:"size,omitempty"`
-	Accessories     string             `json:"accessories,omitempty"`
-	Notes           string             `json:"notes,omitempty"`
-	Fair            *Valuation         `json:"fair,omitempty"`
-	Drop            *Drop              `json:"drop,omitempty"`
-	History         []store.PricePoint `json:"history,omitempty"`
+	ConditionScheme string       `json:"condition_scheme"`
+	ConditionBy     string       `json:"condition_by"`
+	PriceJPY        int64        `json:"price_jpy"`
+	PriceTWD        int64        `json:"price_twd"`
+	WasPriceJPY     int64        `json:"was_price_jpy,omitempty"`
+	Status          string       `json:"status"`
+	FirstSeen       time.Time    `json:"first_seen"`
+	GoneAt          *time.Time   `json:"gone_at,omitempty"`
+	DaysListed      int          `json:"days_listed"`
+	Color           string       `json:"color,omitempty"`
+	Material        string       `json:"material,omitempty"`
+	Size            string       `json:"size,omitempty"`
+	Accessories     string       `json:"accessories,omitempty"`
+	Notes           string       `json:"notes,omitempty"`
+	Fair            *Valuation   `json:"fair,omitempty"`
+	Drop            *Drop        `json:"drop,omitempty"`
+	History         []PricePoint `json:"history,omitempty"`
 }
 
 // GradeStat is price by one source grade.
@@ -91,6 +134,9 @@ type GradeStat struct {
 	MedianJPY int64         `json:"median_jpy"`
 	MinJPY    int64         `json:"min_jpy"`
 	MaxJPY    int64         `json:"max_jpy"`
+	MedianTWD int64         `json:"median_twd"`
+	MinTWD    int64         `json:"min_twd"`
+	MaxTWD    int64         `json:"max_twd"`
 }
 
 type ModelStats struct {
@@ -124,6 +170,7 @@ type Engine struct {
 	groups  map[string][]*Item // brand|group_key -> items
 	builtAt time.Time
 	epoch   time.Time // earliest first_seen = when crawling began
+	latest  time.Time // latest observation (seen or gone) = last sweep
 }
 
 func (e *Engine) now() time.Time {
@@ -160,7 +207,7 @@ func (e *Engine) build(rows []store.Row, version string) {
 	items := make([]*Item, 0, len(rows))
 	byID := make(map[string]*Item, len(rows))
 	groups := map[string][]*Item{}
-	var epoch time.Time
+	var epoch, latest time.Time
 	for i := range rows {
 		r := &rows[i]
 		it := e.toItem(r, now)
@@ -173,6 +220,11 @@ func (e *Engine) build(rows []store.Row, version string) {
 		if epoch.IsZero() || r.FirstSeen.Before(epoch) {
 			epoch = r.FirstSeen
 		}
+		for _, t := range []time.Time{r.FirstSeen, r.LastSeen, r.GoneAt} {
+			if t.After(latest) {
+				latest = t
+			}
+		}
 	}
 	for _, it := range items {
 		if it.Status == "active" && it.GroupKey != "" {
@@ -180,15 +232,31 @@ func (e *Engine) build(rows []store.Row, version string) {
 		}
 	}
 	e.mu.Lock()
-	e.items, e.byID, e.groups, e.version, e.builtAt, e.epoch = items, byID, groups, version, now, epoch
+	e.items, e.byID, e.groups, e.version, e.builtAt, e.epoch, e.latest = items, byID, groups, version, now, epoch, latest
 	e.mu.Unlock()
+}
+
+// SoldStatsReady reports whether crawl history spans MinSoldHistory, the one
+// gate for every surface that states sold counts or days to sell. History is
+// first to last observation, not first observation to now: days the crawler
+// did not run (a stale or copied database) observed no sales and are not
+// history.
+func (e *Engine) SoldStatsReady() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.soldStatsReady()
+}
+
+func (e *Engine) soldStatsReady() bool {
+	return !e.epoch.IsZero() && e.latest.Sub(e.epoch) >= MinSoldHistory
 }
 
 func (e *Engine) toItem(r *store.Row, now time.Time) *Item {
 	b, _ := listing.BrandByName(r.Brand)
 	scheme, _ := listing.SchemeFor(r.Source)
 	it := &Item{
-		ID: r.ID, URL: r.URL, ImageURL: r.ImageURL, Source: r.Source,
+		ID: r.ID, URL: r.URL, ImageURL: r.ImageURL, PhotoPending: photoPending(r.ImageURL),
+		Source: r.Source, SourceName: scheme.Shop,
 		Brand: r.Brand, BrandZH: b.ZH, Title: r.Title,
 		ModelName: r.ModelName, ModelCode: r.ModelCode, GroupKey: listing.GroupKey(r.ModelCode, r.ModelName),
 		Category: r.Category, CategoryZH: listing.CategoryZH(r.Category),
@@ -197,7 +265,9 @@ func (e *Engine) toItem(r *store.Row, now time.Time) *Item {
 		PriceJPY: r.PriceJPY, PriceTWD: e.FX.TWD(r.PriceJPY), WasPriceJPY: r.WasPriceJPY,
 		Status: r.Status, FirstSeen: r.FirstSeen,
 		Color: r.Color, Material: r.Material, Size: r.Size, Accessories: r.Accessories, Notes: r.Notes,
-		History: r.PriceHistory,
+	}
+	for _, p := range r.PriceHistory {
+		it.History = append(it.History, PricePoint{At: p.At, PriceJPY: p.PriceJPY, PriceTWD: e.FX.TWD(p.PriceJPY)})
 	}
 	end := now
 	if !r.GoneAt.IsZero() {
@@ -210,10 +280,17 @@ func (e *Engine) toItem(r *store.Row, now time.Time) *Item {
 		prev, last := h[len(h)-2], h[len(h)-1]
 		if last.PriceJPY < prev.PriceJPY {
 			it.Drop = &Drop{FromJPY: prev.PriceJPY, ToJPY: last.PriceJPY, At: last.At,
+				FromTWD: e.FX.TWD(prev.PriceJPY), ToTWD: e.FX.TWD(last.PriceJPY),
 				Pct: float64(prev.PriceJPY-last.PriceJPY) / float64(prev.PriceJPY)}
 		}
 	}
 	return it
+}
+
+// photoPending reports a missing product photo. BRAND OFF lists items before
+// their studio shots exist and points the image at .../NowPrinting_L.jpg.
+func photoPending(url string) bool {
+	return url == "" || strings.Contains(url, "/NowPrinting")
 }
 
 // value estimates fair price for it from its group.
@@ -239,14 +316,14 @@ func (e *Engine) value(it *Item, group []*Item, now time.Time) *Valuation {
 	var comps []float64
 	level := 0 // 0 low, 1 medium, 2 high
 	switch {
-	case len(same) >= minComps:
+	case len(same) >= MinComps:
 		comps = same
 		v.FairJPY, v.Method, v.Comps = int64(median(same)), "same-grade", len(same)
 		level = 1
 		if len(same) >= 6 {
 			level = 2
 		}
-	case len(adjusted) >= minComps && rank.Score() >= 0:
+	case len(adjusted) >= MinComps && rank.Score() >= 0:
 		comps = adjusted
 		v.FairJPY, v.Method, v.Comps = int64(median(adjusted)*rank.Factor()), "rank-adjusted", len(adjusted)
 		if len(adjusted) >= 6 {
@@ -274,13 +351,9 @@ func (e *Engine) value(it *Item, group []*Item, now time.Time) *Valuation {
 	v.Confidence = []string{"low", "low", "medium", "high"}[max(level, -1)+1]
 	v.FairTWD = e.FX.TWD(v.FairJPY)
 	v.DealPct = float64(v.FairJPY-it.PriceJPY) / float64(v.FairJPY)
-	// Half price against a solid comparable set is rarely a bargain; it's
-	// usually damage or missing parts the title doesn't mention.
-	v.Anomaly = v.DealPct > anomalyPct
+	v.Anomaly = v.DealPct > AnomalyPct
 	return v
 }
-
-const anomalyPct = 0.5
 
 // dispersion is the interquartile range relative to the median.
 func dispersion(xs []float64) float64 {
@@ -322,7 +395,10 @@ type Filter struct {
 	OnlyDeals   bool     `json:"only_deals,omitempty"`
 	IncludeGone bool     `json:"include_gone,omitempty"`
 	Sort        string   `json:"sort,omitempty"` // deal | price_asc | price_desc | newest
-	Limit       int      `json:"limit,omitempty"`
+	// Offset skips that many sorted matches, for paging; total still counts
+	// every match.
+	Offset int `json:"offset,omitempty"`
+	Limit  int `json:"limit,omitempty"`
 }
 
 // Search returns copies of matching items (without history, to keep payloads small).
@@ -354,7 +430,7 @@ func (e *Engine) Search(f Filter) (items []Item, total int) {
 			(minRank >= 0 && listing.Rank(it.Rank).Score() < minRank) ||
 			(f.MinPriceTWD > 0 && it.PriceTWD < f.MinPriceTWD) ||
 			(f.MaxPriceTWD > 0 && it.PriceTWD > f.MaxPriceTWD) ||
-			(f.OnlyDeals && (it.Fair == nil || it.Fair.DealPct < 0.05 || it.Fair.Confidence == "low" || it.Fair.Anomaly)) {
+			(f.OnlyDeals && !IsDeal(it)) {
 			continue
 		}
 		if len(kws) > 0 && !matchAny(it, kws) {
@@ -362,8 +438,9 @@ func (e *Engine) Search(f Filter) (items []Item, total int) {
 		}
 		out = append(out, it)
 	}
-	sortItems(out, f.Sort)
+	e.sortItems(out, f.Sort)
 	total = len(out)
+	out = out[min(max(f.Offset, 0), len(out)):]
 	limit := f.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 30
@@ -377,6 +454,15 @@ func (e *Engine) Search(f Filter) (items []Item, total int) {
 		items[i].History = nil
 	}
 	return items, total
+}
+
+// IsDeal reports whether a listing counts as below market: valued at least
+// DealMinPct under fair value, not low confidence, not flagged as an anomaly.
+// It is the 價格最美 predicate — Home's shelf and count, Browse's switch, the advisor's
+// only_deals and the demo member's tracked models all use it, so one change
+// here moves them together. Overview's Deals count keeps its own 10% bar.
+func IsDeal(it *Item) bool {
+	return it.Fair != nil && it.Fair.DealPct >= DealMinPct && it.Fair.Confidence != "low" && !it.Fair.Anomaly
 }
 
 func matchAny(it *Item, kws []string) bool {
@@ -401,14 +487,60 @@ func dealScore(it *Item) float64 {
 	return it.Fair.DealPct * confidenceWeight[it.Fair.Confidence]
 }
 
-func sortItems(xs []*Item, by string) {
+// watched reports whether Kura saw the listing appear: first seen after the
+// initial crawl, which takes in the whole catalogue as already listed. Days to
+// sell and 最新上架 order both turn on it.
+func (e *Engine) watched(it *Item) bool {
+	return it.FirstSeen.After(e.epoch.Add(24 * time.Hour))
+}
+
+// newer reports whether a was listed on its shop more recently than b — the
+// one 最新上架 order, used by sort=newest (Home's shelf, Browse, the advisor)
+// and the demo member's 新上架 pick. Listings Kura watched appear rank first,
+// latest first_seen first. Initial-crawl listings follow in the opposite
+// direction: their first_seen is only crawl order, and a source sweeps its
+// list pages newest first (crawl.Source.Sweep; BRAND OFF's sort=Number1), so
+// an earlier first_seen is a newer listing.
+// Rejected: latest first_seen throughout — on a first sweep it surfaces the
+// deepest pages, the shop's oldest stock, as 最新上架. Within one second
+// (about a list page) the shop's order is lost; ties fall back to id so the
+// order is stable across requests.
+func (e *Engine) newer(a, b *Item) bool {
+	wa, wb := e.watched(a), e.watched(b)
+	switch {
+	case wa != wb:
+		return wa
+	case a.FirstSeen.Equal(b.FirstSeen):
+		return a.ID < b.ID
+	case wa:
+		return a.FirstSeen.After(b.FirstSeen)
+	default:
+		return a.FirstSeen.Before(b.FirstSeen)
+	}
+}
+
+// NewestActive returns the newest active listing among items, in 最新上架
+// order, or nil if none is active. It points into items.
+func (e *Engine) NewestActive(items []Item) *Item {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var n *Item
+	for i := range items {
+		if it := &items[i]; it.Status == "active" && (n == nil || e.newer(it, n)) {
+			n = it
+		}
+	}
+	return n
+}
+
+func (e *Engine) sortItems(xs []*Item, by string) {
 	switch by {
 	case "price_asc":
 		sort.SliceStable(xs, func(i, j int) bool { return xs[i].PriceJPY < xs[j].PriceJPY })
 	case "price_desc":
 		sort.SliceStable(xs, func(i, j int) bool { return xs[i].PriceJPY > xs[j].PriceJPY })
 	case "newest":
-		sort.SliceStable(xs, func(i, j int) bool { return xs[i].FirstSeen.After(xs[j].FirstSeen) })
+		sort.SliceStable(xs, func(i, j int) bool { return e.newer(xs[i], xs[j]) })
 	default: // deal
 		sort.SliceStable(xs, func(i, j int) bool {
 			di, dj := dealScore(xs[i]), dealScore(xs[j])
@@ -447,6 +579,32 @@ func (e *Engine) Drops(brand string, limit int) []Item {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Drop.At.After(out[j].Drop.At) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	res := make([]Item, len(out))
+	for i, it := range out {
+		res[i] = *it
+	}
+	return res
+}
+
+// Gone returns listings no longer on sale, most recently gone first.
+func (e *Engine) Gone(limit int) []Item {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var out []*Item
+	for _, it := range e.items {
+		if it.Status != "active" && it.GoneAt != nil {
+			out = append(out, it)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].GoneAt.Equal(*out[j].GoneAt) {
+			return out[i].GoneAt.After(*out[j].GoneAt)
+		}
+		return out[i].ID < out[j].ID
+	})
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}
@@ -525,7 +683,7 @@ func (e *Engine) stats(g []*Item) ModelStats {
 		} else {
 			s.Sold++
 			// Only items we watched appear can tell us how long selling took.
-			if it.GoneAt != nil && it.FirstSeen.After(e.epoch.Add(24*time.Hour)) {
+			if it.GoneAt != nil && e.watched(it) {
 				days = append(days, it.GoneAt.Sub(it.FirstSeen).Hours()/24)
 			}
 		}
@@ -542,8 +700,10 @@ func (e *Engine) stats(g []*Item) ModelStats {
 		s.MedianDaysToSell = &m
 	}
 	for k, ps := range byGrade {
+		med, lo, hi := int64(median(ps)), int64(slices.Min(ps)), int64(slices.Max(ps))
 		s.ByGrade = append(s.ByGrade, GradeStat{Source: k.source, Grade: grades[k], Count: len(ps),
-			MedianJPY: int64(median(ps)), MinJPY: int64(slices.Min(ps)), MaxJPY: int64(slices.Max(ps))})
+			MedianJPY: med, MinJPY: lo, MaxJPY: hi,
+			MedianTWD: e.FX.TWD(med), MinTWD: e.FX.TWD(lo), MaxTWD: e.FX.TWD(hi)})
 	}
 	// Best condition first, then by source for a stable order.
 	sort.Slice(s.ByGrade, func(i, j int) bool {
@@ -557,21 +717,25 @@ func (e *Engine) stats(g []*Item) ModelStats {
 }
 
 type Overview struct {
-	Active  int            `json:"active"`
-	Sold    int            `json:"sold"`
-	Models  int            `json:"models"`
-	Valued  int            `json:"valued"`
-	Deals   int            `json:"deals"`
-	Drops   int            `json:"drops"`
-	ByBrand map[string]int `json:"by_brand"`
-	Since   time.Time      `json:"since"`
-	BuiltAt time.Time      `json:"built_at"`
+	Active     int            `json:"active"`
+	Sold       int            `json:"sold"`
+	Models     int            `json:"models"`
+	Valued     int            `json:"valued"`
+	Deals      int            `json:"deals"`
+	Drops      int            `json:"drops"`
+	ByBrand    map[string]int `json:"by_brand"`
+	ByCategory map[string]int `json:"by_category"` // active listings per category key
+	Since      time.Time      `json:"since"`
+	BuiltAt    time.Time      `json:"built_at"`
+	// SoldStatsReady: see Engine.SoldStatsReady.
+	SoldStatsReady bool `json:"sold_stats_ready"`
 }
 
 func (e *Engine) Overview() Overview {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	o := Overview{ByBrand: map[string]int{}, Models: len(e.groups), Since: e.epoch, BuiltAt: e.builtAt}
+	o := Overview{ByBrand: map[string]int{}, ByCategory: map[string]int{}, Models: len(e.groups), Since: e.epoch, BuiltAt: e.builtAt,
+		SoldStatsReady: e.soldStatsReady()}
 	for _, it := range e.items {
 		if it.Status != "active" {
 			o.Sold++
@@ -579,6 +743,7 @@ func (e *Engine) Overview() Overview {
 		}
 		o.Active++
 		o.ByBrand[it.Brand]++
+		o.ByCategory[it.Category]++
 		if it.Fair != nil {
 			o.Valued++
 			if it.Fair.DealPct >= 0.1 && it.Fair.Confidence != "low" && !it.Fair.Anomaly {

@@ -132,6 +132,13 @@ type ErrInvalidInput struct{ msg string }
 
 func (e ErrInvalidInput) Error() string { return e.msg }
 
+// soldUnknown marks results whose sold-derived figures (sold count,
+// sell-through, days to sell) are withheld because crawl history is shorter
+// than radar.MinSoldHistory. Sending them as 0 would read as "never sells",
+// and the model page shows 資料不足 for the same figures from the same gate
+// (radar.Engine.SoldStatsReady), so the advisor must not state a number there.
+const soldUnknown = "insufficient_history"
+
 func decode(raw string, v any) error {
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -247,7 +254,7 @@ func (t *Tools) modelStats(in modelInput) (ToolResult, error) {
 	var grades []gradeTWD
 	for _, g := range stats.ByGrade {
 		grades = append(grades, gradeTWD{g.Source, g.Grade.Label, g.Grade.DescZH, g.Count,
-			t.FX.TWD(g.MedianJPY), t.FX.TWD(g.MinJPY), t.FX.TWD(g.MaxJPY)})
+			g.MedianTWD, g.MinTWD, g.MaxTWD})
 	}
 	var cheapest []compact
 	var cards []radar.Item
@@ -259,12 +266,18 @@ func (t *Tools) modelStats(in modelInput) (ToolResult, error) {
 	}
 	res := map[string]any{
 		"brand": stats.Brand, "model": stats.ModelName, "model_code": stats.ModelCode, "group_key": stats.GroupKey,
-		"active_listings": stats.Active, "sold_observed": stats.Sold,
-		"sell_through": round2(stats.SellThrough), "median_days_to_sell": stats.MedianDaysToSell,
-		"median_twd": t.FX.TWD(stats.MedianJPY), "by_condition_grade": grades, "cheapest_active": cheapest, "fx": t.fxNote(),
+		"active_listings": stats.Active,
+		"median_twd":      t.FX.TWD(stats.MedianJPY), "by_condition_grade": grades, "cheapest_active": cheapest, "fx": t.fxNote(),
 	}
-	return ToolResult{JSON: marshal(res), Listings: cards,
-		Summary: fmt.Sprintf("%s：在售 %d 件、已售出 %d 件", stats.ModelName, stats.Active, stats.Sold)}, nil
+	summary := fmt.Sprintf("%s：在售 %d 件", stats.ModelName, stats.Active)
+	if t.Radar.SoldStatsReady() {
+		res["sold_observed"], res["sell_through"], res["median_days_to_sell"] =
+			stats.Sold, round2(stats.SellThrough), stats.MedianDaysToSell
+		summary += fmt.Sprintf("、已售出 %d 件", stats.Sold)
+	} else {
+		res["sold_stats"] = soldUnknown
+	}
+	return ToolResult{JSON: marshal(res), Listings: cards, Summary: summary}, nil
 }
 
 func (t *Tools) getListing(in listingInput) (ToolResult, error) {
@@ -278,13 +291,17 @@ func (t *Tools) getListing(in listingInput) (ToolResult, error) {
 	}
 	var hist []pt
 	for _, p := range it.History {
-		hist = append(hist, pt{p.At.Format(time.DateOnly), t.FX.TWD(p.PriceJPY)})
+		hist = append(hist, pt{p.At.Format(time.DateOnly), p.PriceTWD})
 	}
 	res := map[string]any{"listing": toCompact(it), "title_ja": it.Title, "notes": it.Notes,
 		"price_history": hist, "url": it.URL, "fx": t.fxNote()}
 	if stats != nil {
 		res["model_active_listings"] = stats.Active
-		res["model_sold_observed"] = stats.Sold
+		if t.Radar.SoldStatsReady() {
+			res["model_sold_observed"] = stats.Sold
+		} else {
+			res["sold_stats"] = soldUnknown
+		}
 	}
 	return ToolResult{JSON: marshal(res), Listings: []radar.Item{it}, Summary: "讀取商品 " + it.ModelName}, nil
 }
@@ -298,23 +315,33 @@ func (t *Tools) overview(in overviewInput) (ToolResult, error) {
 		}
 		brand = b.Name
 	}
+	o := t.Radar.Overview()
 	type model struct {
 		Model     string `json:"model"`
 		Brand     string `json:"brand"`
 		GroupKey  string `json:"group_key"`
 		Category  string `json:"category"`
 		Active    int    `json:"active"`
-		Sold      int    `json:"sold_observed"`
+		Sold      *int   `json:"sold_observed,omitempty"` // nil until sold stats are ready
 		MedianTWD int64  `json:"median_twd"`
 		MinTWD    int64  `json:"min_twd"`
 	}
 	var models []model
 	for _, m := range t.Radar.Models(brand, 15) {
-		models = append(models, model{m.ModelName, m.Brand, m.GroupKey, listing.CategoryZH(m.Category),
-			m.Active, m.Sold, t.FX.TWD(m.MedianJPY), t.FX.TWD(m.MinJPY)})
+		md := model{Model: m.ModelName, Brand: m.Brand, GroupKey: m.GroupKey, Category: listing.CategoryZH(m.Category),
+			Active: m.Active, MedianTWD: t.FX.TWD(m.MedianJPY), MinTWD: t.FX.TWD(m.MinJPY)}
+		if o.SoldStatsReady {
+			n := m.Sold
+			md.Sold = &n
+		}
+		models = append(models, md)
 	}
-	o := t.Radar.Overview()
-	res := map[string]any{"active_listings": o.Active, "sold_observed": o.Sold, "by_brand": o.ByBrand,
+	res := map[string]any{"active_listings": o.Active, "by_brand": o.ByBrand,
 		"tracking_since": o.Since.Format(time.DateOnly), "top_models": models, "fx": t.fxNote()}
+	if o.SoldStatsReady {
+		res["sold_observed"] = o.Sold
+	} else {
+		res["sold_stats"] = soldUnknown
+	}
 	return ToolResult{JSON: marshal(res), Summary: fmt.Sprintf("市場概況：%d 件在售", o.Active)}, nil
 }

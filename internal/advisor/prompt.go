@@ -1,11 +1,14 @@
 package advisor
 
 import (
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
 
 	"github.com/No3371/kura/internal/listing"
+	"github.com/No3371/kura/internal/radar"
 )
 
 // systemPrompt is static so that it (and the tool list before it) caches.
@@ -30,7 +33,9 @@ const systemPrompt = `你是 Kura 的「AI 找包顧問」，協助台灣買家�
   不同店家的同名等級標準不一定相同，比較跨店商品時要提醒這點。
 - 「行情價」是同品牌同型號、同成色在售或近期售出商品的中位數；comps 是比較樣本數。
   信心度低或樣本少時要說明；deal_pct 為正代表低於行情。不要把行情估計說成保證。
-- price_anomaly 為 true 的商品比行情低一半以上，多半有標題沒寫的瑕疵或缺件：不要當成好價推薦，
+- 工具結果帶有 sold_stats: insufficient_history 時，代表 Kura 的記錄時間還不夠：已售出件數、售出率與售出天數都未知（不是 0）。
+  請說「資料不足」，不要推測，也不要當成賣不掉。
+- price_anomaly 為 true 的商品比行情低超過 {{anomaly_pct}}%，多半有標題沒寫的瑕疵或缺件：不要當成好價推薦，
   若提到它，請提醒使用者先用 get_listing 或商品頁確認狀況。
 - Kura 不提供真偽鑑定；真偽與商品狀況以賣家說明為準。
 
@@ -45,9 +50,13 @@ func buildSystemPrompt() string {
 	for _, b := range listing.Brands {
 		brands = append(brands, b.Name+"("+b.ZH+")")
 	}
-	return strings.NewReplacer("{{categories}}", strings.Join(cats, ", "), "{{brands}}", strings.Join(brands, ", ")).
+	return strings.NewReplacer("{{categories}}", strings.Join(cats, ", "), "{{brands}}", strings.Join(brands, ", "),
+		"{{anomaly_pct}}", pctText(radar.AnomalyPct)).
 		Replace(systemPrompt)
 }
+
+// pctText formats a fraction as a whole percent, e.g. 0.05 → "5".
+func pctText(f float64) string { return strconv.Itoa(int(math.Round(f * 100))) }
 
 func toolDefs() []anthropic.BetaToolUnionParam {
 	var catKeys []string
@@ -69,7 +78,7 @@ func toolDefs() []anthropic.BetaToolUnionParam {
 				"min_rank":      map[string]any{"type": "string", "enum": ranks, "description": "Minimum condition on Kura's cross-source scale (N new, S unused, A light use, B visible use, C heavy use). Results still carry each shop's own grade."},
 				"min_price_twd": map[string]any{"type": "integer"},
 				"max_price_twd": map[string]any{"type": "integer"},
-				"only_deals":    map[string]any{"type": "boolean", "description": "Only listings at least 5% below fair value"},
+				"only_deals":    map[string]any{"type": "boolean", "description": "Only listings at least " + pctText(radar.DealMinPct) + "% below fair value"},
 				"sort":          map[string]any{"type": "string", "enum": []string{"deal", "price_asc", "price_desc", "newest"}},
 				"limit":         map[string]any{"type": "integer", "minimum": 1, "maximum": 10},
 			}},
@@ -77,7 +86,8 @@ func toolDefs() []anthropic.BetaToolUnionParam {
 		{
 			Name: "model_price_stats",
 			Description: anthropic.String("Market statistics for one model: price by condition rank, how many sold, " +
-				"sell-through and median days to sell, plus the cheapest active listings."),
+				"sell-through and median days to sell, plus the cheapest active listings. " +
+				"Sold count, sell-through and days to sell are omitted (sold_stats: insufficient_history) until Kura has enough crawl history; they are then unknown, not zero."),
 			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
 				"brand":      map[string]any{"type": "string"},
 				"model_code": map[string]any{"type": "string"},

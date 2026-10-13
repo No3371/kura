@@ -202,3 +202,24 @@ func TestAgentRollsBackFailedTurn(t *testing.T) {
 		t.Errorf("history after failed turn = %d messages, want 0", n)
 	}
 }
+
+func TestPromptStatesThresholds(t *testing.T) {
+	p := buildSystemPrompt()
+	if want := "低超過 " + pctText(radar.AnomalyPct) + "%"; !strings.Contains(p, want) {
+		t.Errorf("system prompt lacks %q", want)
+	}
+	if strings.Contains(p, "{{") {
+		t.Error("system prompt has an unreplaced placeholder")
+	}
+	var desc string
+	for _, d := range toolDefs() {
+		if d.OfTool != nil && d.OfTool.Name == "search_listings" {
+			props, _ := d.OfTool.InputSchema.Properties.(map[string]any)
+			od, _ := props["only_deals"].(map[string]any)
+			desc, _ = od["description"].(string)
+		}
+	}
+	if want := "at least " + pctText(radar.DealMinPct) + "%"; !strings.Contains(desc, want) {
+		t.Errorf("only_deals description %q lacks %q", desc, want)
+	}
+}

@@ -1,0 +1,624 @@
+/* Kura 蔵 — tokens, base, shell, member header, listing card, home, listing detail, model page, browse, advisor.
+   Token values are docs/design-handoff/kura-tokens.css unchanged, plus
+   --k-chart-mark and --k-mat-note. Theme selectors also match [data-theme] on any element so a
+   sub-tree (the card-state page, artboard checks) can force a theme. */
+
+:root {
+  /* Type */
+  --k-font-display: "Noto Serif TC", serif;                 /* headings, lede */
+  --k-font-num: "EB Garamond", "Noto Serif TC", serif;      /* prices, brand names */
+  --k-font-ja: "Shippori Mincho", "Noto Serif TC", serif;   /* Japanese model names, shop grades */
+  --k-font-ui: "Noto Sans TC", "PingFang TC", system-ui, sans-serif; /* UI, data, charts */
+  --k-font-hand: "LXGW WenKai TC", "Noto Serif TC", serif;  /* Kura's short margin notes only */
+
+  --k-text-12: 12px;  /* caption, meta */
+  --k-text-13: 13px;  /* badges, detail lines */
+  --k-text-14: 14px;  /* controls */
+  --k-text-15: 15px;  /* body, margin note */
+  --k-text-18: 18px;  /* model name (ja) */
+  --k-text-20: 20px;  /* section heading */
+  --k-text-28: 28px;  /* card price */
+  --k-text-34: 34px;  /* lede */
+  --k-text-40: 40px;  /* display */
+  --k-num: lining-nums tabular-nums; /* use with font-variant-numeric on prices */
+
+  /* Space (4px base) */
+  --k-space-1: 4px;  --k-space-2: 8px;  --k-space-3: 12px; --k-space-4: 16px;
+  --k-space-6: 24px; --k-space-8: 32px; --k-space-12: 48px; --k-space-16: 64px;
+
+  /* Radius */
+  --k-radius-1: 2px;     /* controls, tags, badges */
+  --k-radius-2: 4px;     /* drawer, dialogs */
+  --k-radius-pill: 999px;/* status pill only */
+}
+
+/* Colour — day shop (light) */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --k-paper: #F5F0E6;
+  --k-paper-sunk: #EDE6D8;
+  --k-surface: #FBF8F2;
+  --k-ink: #1E1915;
+  --k-ink-2: #4B423A;
+  --k-ink-3: #6B6055;
+  --k-rule: #DDD2BF;
+  --k-rule-strong: #B9A88C;
+  --k-brass: #A08158;          /* hairlines only, never text */
+  --k-accent: #6B1F2A;         /* oxblood fill */
+  --k-accent-ink: #6B1F2A;     /* oxblood text */
+  --k-accent-wash: #F2E4E1;
+  --k-on-accent: #FBF5EE;
+  --k-caution: #7A4E0E;        /* anomaly text */
+  --k-caution-wash: #F6ECD6;
+  --k-caution-rule: #D4AC63;
+  --k-mat: #FFFFFF;            /* photo mat */
+  --k-mat-line: #E4DACA;
+  --k-mat-ink: #BDB19D;
+  --k-mat-note: #7D7262;       /* caption on the photo mat */
+  --k-focus: #6B1F2A;
+  --k-chart-mark: #7A6B58;     /* chart dots and lines */
+  --k-shadow: 0 1px 0 rgba(60,40,20,.05), 0 10px 28px -14px rgba(60,40,20,.22);
+}
+
+/* Night shop (dark): follows the OS unless the user picked light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --k-paper: #1B1815; --k-paper-sunk: #151310; --k-surface: #24201C;
+    --k-ink: #EEE7DB; --k-ink-2: #C7BCAB; --k-ink-3: #A09482;
+    --k-rule: #3A332C; --k-rule-strong: #5A5045; --k-brass: #8A714E;
+    --k-accent: #8E2E3B; --k-accent-ink: #E3A1A6; --k-accent-wash: #3A1F23; --k-on-accent: #FBF0EC;
+    --k-caution: #E2B86A; --k-caution-wash: #33291A; --k-caution-rule: #6B5328;
+    --k-mat: #ECE5D7; --k-mat-line: #D6CCB9; --k-mat-ink: #A99E8A;
+    --k-mat-note: #6B6055;
+    --k-focus: #E3A1A6;
+    --k-chart-mark: #857868;
+    --k-shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --k-paper: #1B1815; --k-paper-sunk: #151310; --k-surface: #24201C;
+  --k-ink: #EEE7DB; --k-ink-2: #C7BCAB; --k-ink-3: #A09482;
+  --k-rule: #3A332C; --k-rule-strong: #5A5045; --k-brass: #8A714E;
+  --k-accent: #8E2E3B; --k-accent-ink: #E3A1A6; --k-accent-wash: #3A1F23; --k-on-accent: #FBF0EC;
+  --k-caution: #E2B86A; --k-caution-wash: #33291A; --k-caution-rule: #6B5328;
+  --k-mat: #ECE5D7; --k-mat-line: #D6CCB9; --k-mat-ink: #A99E8A;
+  --k-mat-note: #6B6055;
+  --k-focus: #E3A1A6;
+  --k-chart-mark: #857868;
+  --k-shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+}
+
+/* Base */
+body { margin: 0; background: var(--k-paper); color: var(--k-ink); font-family: var(--k-font-ui); -webkit-font-smoothing: antialiased; }
+[data-theme] { background: var(--k-paper); color: var(--k-ink); }
+:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 2px; border-radius: var(--k-radius-1); }
+/* !important: component rules set display, which would otherwise beat the attribute. */
+[hidden] { display: none !important; }
+.k-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* !important: link colours are set by component rules of equal or higher
+   specificity (header, footer, card), which would otherwise mask the hover. */
+.k-link:hover { color: var(--k-accent-ink) !important; text-decoration: underline !important; text-underline-offset: 3px; }
+.k-wrap { max-width: 1280px; margin: 0 auto; padding: 0 40px; box-sizing: border-box; }
+
+/* Prices */
+.k-price { font-family: var(--k-font-num); font-weight: 500; font-variant-numeric: var(--k-num); line-height: 1; }
+
+/* Valuation badges (always icon + words; colour is never the only signal) */
+.k-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: var(--k-radius-1); font-size: var(--k-text-13); }
+.k-badge--below   { background: var(--k-accent-wash); color: var(--k-accent-ink); border: 1px solid var(--k-accent); font-weight: 700; }
+.k-badge--low     { color: var(--k-ink-2); border: 1px dashed var(--k-rule-strong); }
+.k-badge--anomaly { background: var(--k-caution-wash); color: var(--k-caution); border: 1px solid var(--k-caution-rule); font-weight: 500; }
+.k-badge--near, .k-badge--above, .k-badge--none { color: var(--k-ink-3); padding: 0; }
+
+/* Condition tag: solid = graded by the shop; dashed + 「賣家自評」 = graded by the seller */
+.k-grade { font-family: var(--k-font-ja); font-size: var(--k-text-12); padding: 1px 6px; border-radius: var(--k-radius-1); border: 1px solid var(--k-rule-strong); white-space: nowrap; }
+.k-grade--seller { border-style: dashed; }
+
+/* Margin note */
+.k-note { font-family: var(--k-font-hand); font-size: var(--k-text-15); line-height: 1.5; color: var(--k-ink-2); }
+
+/* Header */
+.k-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; padding: 22px 0; border-bottom: 1px solid var(--k-rule); }
+.k-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--k-ink); }
+.k-seal { width: 36px; height: 36px; background: var(--k-accent); color: var(--k-on-accent); display: flex; align-items: center; justify-content: center; font-family: var(--k-font-ja); font-size: 22px; border-radius: 3px; box-shadow: inset 0 0 0 2px var(--k-accent), inset 0 0 0 3px var(--k-on-accent); }
+.k-wordmark { font-family: var(--k-font-num); font-size: 26px; line-height: 1; letter-spacing: .06em; }
+.k-search { flex: 1 1 280px; max-width: 440px; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--k-rule-strong); border-radius: 999px; background: var(--k-surface); color: var(--k-ink-3); box-sizing: border-box; }
+.k-search label { flex: 1 1 auto; align-self: stretch; display: flex; } /* full pill height: ≥24px target */
+.k-search input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--k-ink); outline-offset: 4px; }
+.k-search input::placeholder { color: var(--k-ink-3); }
+.k-search-icon { display: none; margin-left: auto; width: 40px; height: 40px; align-items: center; justify-content: center; color: var(--k-ink-2); }
+.k-guest { display: flex; align-items: center; gap: 4px; }
+.k-guest .k-link { display: inline-flex; align-items: center; height: 40px; padding: 0 12px; font-size: 14px; color: var(--k-ink); text-decoration: none; white-space: nowrap; }
+.k-join { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; font-size: 14px; color: var(--k-on-accent); background: var(--k-accent); text-decoration: none; border-radius: 2px; white-space: nowrap; }
+
+/* Member header + 通知 (markup in index.html, behaviour in notify.js) */
+.k-member { display: flex; align-items: center; gap: 8px; }
+.k-notif { position: relative; }
+.k-iconbtn { position: relative; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--k-ink-2); background: transparent; border: 0; border-radius: 50%; cursor: pointer; }
+.k-bell[aria-expanded="true"] { background: var(--k-paper-sunk); }
+.k-bell__count { position: absolute; top: 4px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: var(--k-accent); color: var(--k-on-accent); font-size: 10px; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--k-paper); }
+.k-notif__panel { position: absolute; right: -8px; top: calc(100% + 10px); width: 380px; z-index: 40; background: var(--k-surface); border: 1px solid var(--k-rule-strong); border-radius: var(--k-radius-2); box-shadow: var(--k-shadow); overflow: hidden; text-align: left; }
+.k-notif__head { display: flex; justify-content: space-between; align-items: baseline; padding: 16px 18px 12px; border-bottom: 1px solid var(--k-rule); }
+.k-notif__head h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 17px; }
+/* Focused on open as a start point, not a control: no ring (as the advisor heading). */
+.k-notif__head h2:focus { outline: none; }
+.k-notif__readall { font: inherit; font-size: 12px; color: var(--k-ink-2); background: transparent; border: 0; padding: 4px 0; min-height: 24px; cursor: pointer; }
+.k-notif__list { list-style: none; margin: 0; padding: 0; }
+.k-notif__list > li { border-bottom: 1px solid var(--k-rule); }
+.k-notif__item { display: grid; grid-template-columns: 8px 48px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px 18px 14px 10px; text-decoration: none; color: var(--k-ink); }
+/* Inset ring: the panel clips overflow, so an outside ring would lose its sides. */
+.k-notif__item:focus-visible { outline-offset: -2px; }
+.k-notif__item.is-unread { background: var(--k-paper); }
+.k-notif__dot { position: relative; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; }
+.is-unread .k-notif__dot { background: var(--k-accent); }
+.k-notif__mat { width: 48px; height: 48px; box-sizing: border-box; background: var(--k-mat); border: 1px solid var(--k-rule); display: flex; align-items: center; justify-content: center; color: var(--k-mat-ink); overflow: hidden; }
+.k-notif__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-notif__mat svg { width: 26px; height: 26px; }
+.k-notif__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.k-notif__meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--k-ink-3); }
+.k-notif__type { font-weight: 700; color: var(--k-accent-ink); }
+.k-notif__item--gone .k-notif__type { color: var(--k-ink-3); }
+.k-notif__title { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k-notif__body { font-size: 13px; line-height: 1.5; color: var(--k-ink-2); }
+.k-notif__empty { padding: 14px 18px; font-size: 13px; color: var(--k-ink-2); }
+.k-notif__foot { display: flex; justify-content: space-between; padding: 12px 18px; font-size: 13px; }
+.k-notif__foot a { color: var(--k-ink-2); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+.k-acct { height: 40px; padding: 0 10px 0 4px; display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; color: var(--k-ink); background: transparent; border: 1px solid var(--k-rule-strong); border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.k-acct__initial { width: 30px; height: 30px; box-sizing: border-box; border-radius: 50%; background: var(--k-paper-sunk); border: 1px solid var(--k-brass); display: flex; align-items: center; justify-content: center; font-family: var(--k-font-display); font-size: 14px; }
+
+/* Footer */
+.k-footer { margin-top: 72px; background: var(--k-paper-sunk); border-top: 1px solid var(--k-brass); }
+.k-footer > .k-wrap { padding-top: 40px; padding-bottom: 104px; display: flex; flex-direction: column; gap: 28px; }
+.k-footer__top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 24px 48px; }
+.k-footer .k-logo { gap: 10px; }
+.k-footer .k-seal { width: 30px; height: 30px; font-size: 18px; box-shadow: none; }
+.k-footer .k-wordmark { font-size: 22px; line-height: normal; }
+.k-footer nav { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); gap: 4px 40px; font-size: 14px; }
+.k-footer nav a { color: var(--k-ink-2); text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+.k-footer__bottom { border-top: 1px solid var(--k-rule); padding-top: 16px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 24px; font-size: 12px; line-height: 1.7; color: var(--k-ink-3); }
+
+/* Home sections */
+.k-sec__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 22px; }
+.k-sec h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 30px; line-height: 1.3; }
+.k-sec__more { font-size: 13px; color: var(--k-ink-2); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+.k-sec--first { padding: 44px 0 64px; }
+.k-sec--ruled { padding: 0 0 64px; }
+.k-sec--ruled .k-sec__head { padding-top: 28px; border-top: 1px solid var(--k-brass); }
+.k-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 28px; }
+.k-row > * { min-width: 0; }
+.k-empty, .k-notfound { padding: 96px 0 72px; max-width: 620px; }
+.k-empty h1, .k-notfound h1 { margin: 0 0 16px; font-family: var(--k-font-display); font-weight: 400; font-size: 40px; line-height: 1.3; }
+.k-empty p, .k-notfound p { margin: 0; font-size: 16px; line-height: 1.8; color: var(--k-ink-2); }
+.k-notfound a { font-size: 16px; color: var(--k-ink-2); }
+.k-error { padding: 72px 0; font-size: 16px; color: var(--k-ink-2); }
+/* The router focuses a view's heading after navigation as a start point, not
+   a control: like the panel headings, it shows no ring. */
+#main [tabindex="-1"]:focus { outline: none; }
+
+/* 行情怎麼算 — reuses .k-crumb, .k-dsec, .k-badge, .k-grade */
+.k-method { max-width: 880px; padding-bottom: 48px; }
+.k-method h1 { margin: 12px 0 16px; font-family: var(--k-font-display); font-weight: 400; font-size: 40px; line-height: 1.3; }
+.k-method p, .k-method li { font-size: 16px; line-height: 1.85; max-width: 40em; }
+.k-method p { margin: 0 0 18px; }
+.k-method__lead { color: var(--k-ink-2); padding-bottom: 32px; }
+.k-method ul { margin: 0 0 18px; padding-left: 1.2em; }
+.k-method strong { font-weight: 600; }
+.k-method .k-dsec a { color: var(--k-ink-2); } /* scoped: .k-crumb a keeps ink-3 */
+.k-method__dl { margin: 0 0 18px; max-width: 46em; }
+.k-method__dl > div { display: grid; grid-template-columns: 13.5em minmax(0, 1fr); gap: 4px 20px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--k-rule); }
+.k-method__dl dt { min-width: 0; }
+.k-method__dl dd { margin: 0; font-size: 15px; line-height: 1.7; color: var(--k-ink-2); }
+.k-method__ja { display: block; font-family: var(--k-font-ja); font-size: 13px; color: var(--k-ink-3); }
+.k-pending a { color: var(--k-ink-2); }
+
+/* Listing card (stack layout; --row for list views) */
+/* position: relative keeps the card's visually-hidden (absolute) text inside
+   the card; without it that text escapes a scrolling .k-row and widens the page. */
+.k-card { position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-family: var(--k-font-ui); color: var(--k-ink); }
+.k-card--row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 16px; align-items: start; }
+.k-card__media { position: relative; }
+.k-card__mat { aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
+  box-shadow: inset 0 0 0 6px var(--k-mat), inset 0 0 0 7px var(--k-mat-line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); }
+.k-card__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-card.is-sold .k-card__mat { opacity: .6; }
+/* The mat stays near-white in dark, so its caption keeps a dark ink in both
+   themes. The canvas colour #7D7262 reaches 4.71:1 on the light mat but 3.76:1
+   on the dark one (#ECE5D7), under AA's 4.5:1 for 12px text; dark uses
+   #6B6055, 4.89:1. Rejected: --k-ink-3 (light ink in dark, unreadable on the
+   light mat) and --k-mat-ink (2.11:1). A token, not a dark-only rule, so a
+   [data-theme="light"] sub-tree under a dark OS keeps the light value. */
+.k-card__pending { font-size: 12px; color: var(--k-mat-note); letter-spacing: .04em; text-align: center; }
+.k-card__track { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--k-rule); background: var(--k-surface); color: var(--k-ink-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.k-card__track[aria-pressed="true"] { color: var(--k-accent-ink); }
+.k-card__track[aria-pressed="true"] svg { fill: currentColor; }
+.k-card__sold { position: absolute; top: 16px; left: -6px; transform: rotate(-4deg); background: var(--k-paper); border: 1px solid var(--k-brass);
+  padding: 5px 12px 5px 10px; display: flex; align-items: center; gap: 8px; box-shadow: var(--k-shadow); font-family: var(--k-font-hand); font-size: 15px; color: var(--k-ink); }
+.k-card__sold::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--k-brass); }
+.k-card__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.k-card__brand { font-family: var(--k-font-num); font-size: 12px; letter-spacing: .16em; color: var(--k-ink-3); }
+.k-card__model { font-family: var(--k-font-ja); font-size: 19px; line-height: 1.35; color: var(--k-ink); text-decoration: none; font-weight: 600; overflow-wrap: anywhere; }
+.k-card--row .k-card__model { font-size: 16px; }
+.k-card__grade { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.k-card__grade .k-grade { color: var(--k-ink); }
+.k-card__gradezh { font-size: 13px; color: var(--k-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.k-card__price { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.k-card__price .k-price { font-size: 16px; line-height: 1.2; font-weight: 400; }
+.k-card--row .k-card__price .k-price { font-size: 15px; }
+.k-card.is-sold .k-price { color: var(--k-ink-3); }
+.k-card__lastsold { font-size: 12px; color: var(--k-ink-3); }
+.k-card .k-badge { font-size: 12px; padding: 0 6px; line-height: 20px; gap: 5px; }
+.k-card .k-badge--near, .k-card .k-badge--above, .k-card .k-badge--none { padding: 0; }
+.k-card__drop { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--k-ink-2); font-variant-numeric: tabular-nums; }
+.k-card__drop s { color: var(--k-ink-3); }
+.k-card__shop { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 24px; font-size: 12px; color: var(--k-ink-3); text-decoration: none; letter-spacing: .04em; }
+
+/* Listing detail (商品頁) */
+.k-crumb { padding: 28px 0 10px; font-size: 13px; color: var(--k-ink-3); display: flex; flex-wrap: wrap; gap: 6px; }
+.k-crumb a { color: var(--k-ink-3); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+.k-crumb > span { min-height: 24px; display: inline-flex; align-items: center; }
+.k-crumb__model { font-family: var(--k-font-ja); }
+.k-detail__top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 56px; align-items: start; }
+.k-detail__mat { aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
+  box-shadow: inset 0 0 0 10px var(--k-mat), inset 0 0 0 11px var(--k-mat-line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--k-mat-ink); }
+.k-detail__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-detail__mat svg { width: 200px; height: 200px; }
+.k-detail__mat.is-sold { opacity: .6; }
+.k-detail__info { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.k-detail__id { display: flex; flex-direction: column; gap: 6px; }
+.k-detail__brand { font-family: var(--k-font-num); font-size: 13px; letter-spacing: .18em; color: var(--k-ink-2); }
+.k-detail__brand span { font-family: var(--k-font-ui); letter-spacing: .04em; color: var(--k-ink-3); }
+.k-detail__info h1, .k-model__info h1 { margin: 0; font-family: var(--k-font-ja); font-weight: 600; font-size: 32px; line-height: 1.3; overflow-wrap: anywhere; }
+.k-detail__sub { font-size: 13px; color: var(--k-ink-3); }
+.k-detail__pricing { display: flex; flex-direction: column; gap: 8px; }
+.k-detail__price { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.k-detail__price .k-price { font-size: 26px; }
+.k-detail--sold .k-detail__price .k-price { color: var(--k-ink-3); }
+.k-detail__jpy { font-size: 13px; color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.k-detail__val { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.k-detail__val .k-badge { padding: 2px 8px; }
+.k-detail__val .k-badge--near, .k-detail__val .k-badge--above, .k-detail__val .k-badge--none { padding: 0; }
+.k-detail__fairlink { font-size: 13px; color: var(--k-ink-2); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+.k-detail__lastsold { font-size: 13px; color: var(--k-ink-3); }
+.k-detail__sold { font-family: var(--k-font-hand); font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
+.k-detail__sold::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--k-brass); }
+.k-detail__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.k-cta { position: relative; flex: 1 1 220px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 20px; box-sizing: border-box;
+  background: var(--k-accent); color: var(--k-on-accent); text-decoration: none; border-radius: 2px; font-size: 15px; }
+.k-cta svg { width: 13px; height: 13px; }
+.k-dtrack { height: 48px; padding: 0 18px; display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 15px; color: var(--k-ink);
+  background: transparent; border: 1px solid var(--k-ink-2); border-radius: 2px; cursor: pointer; }
+.k-dtrack svg { width: 18px; height: 18px; }
+.k-dtrack[aria-pressed="true"] { color: var(--k-accent-ink); background: var(--k-accent-wash); border-color: var(--k-accent); }
+.k-dtrack[aria-pressed="true"] svg { fill: currentColor; }
+.k-detail__fine { margin: -8px 0 0; font-size: 12px; line-height: 1.7; color: var(--k-ink-3); }
+
+/* 鑑定卡: the shop's grade on a hang tag */
+.k-tag { position: relative; padding-top: 18px; max-width: 420px; }
+.k-tag__card { position: relative; background: var(--k-surface); border: 1px solid var(--k-rule-strong); box-shadow: var(--k-shadow); padding: 26px 22px 18px; display: flex; flex-direction: column; gap: 10px; }
+.k-tag__hole { position: absolute; top: 9px; left: 50%; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 1px solid var(--k-brass); background: var(--k-paper); box-sizing: border-box; }
+.k-tag__head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .18em; color: var(--k-ink-3); }
+.k-tag__head span:last-child { font-family: var(--k-font-num); letter-spacing: .14em; }
+.k-tag__label { font-family: var(--k-font-ja); font-size: 32px; line-height: 1.1; font-weight: 600; }
+.k-tag__zh { font-size: 15px; line-height: 1.6; }
+.k-tag__ja { font-family: var(--k-font-ja); font-size: 13px; line-height: 1.6; color: var(--k-ink-3); }
+.k-ladder { display: flex; gap: 4px; margin-top: 4px; }
+.k-ladder > span { flex: 1; display: flex; flex-direction: column; gap: 4px; font-family: var(--k-font-ja); font-size: 11px; color: var(--k-ink-3); }
+.k-ladder > span::before { content: ""; height: 3px; background: var(--k-rule); }
+.k-ladder > .is-this { color: var(--k-ink); font-weight: 600; }
+.k-ladder > .is-this::before { background: var(--k-ink); }
+.k-tag__foot { border-top: 1px dashed var(--k-rule-strong); margin-top: 6px; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.k-tag__by { display: flex; flex-direction: column; gap: 2px; }
+.k-tag__by strong { font-size: 14px; font-weight: 700; }
+.k-tag__by span { font-size: 12px; color: var(--k-ink-3); }
+.k-tag__stamp { width: 44px; height: 44px; flex: none; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--k-accent-ink);
+  box-shadow: inset 0 0 0 2px var(--k-surface), inset 0 0 0 3px var(--k-accent-ink); color: var(--k-accent-ink);
+  display: flex; align-items: center; justify-content: center; font-family: var(--k-font-ja); font-size: 13px; line-height: 1.05;
+  writing-mode: vertical-rl; transform: rotate(-8deg); opacity: .9; }
+
+/* Detail lower column */
+.k-detail__col { max-width: 880px; padding-top: 64px; }
+.k-dsec { padding: 0 0 48px; }
+.k-dsec--last { padding: 0 0 8px; }
+.k-dsec > h2 { margin: 0 0 16px; padding-top: 24px; border-top: 1px solid var(--k-brass); font-family: var(--k-font-display); font-weight: 400; font-size: 22px; }
+.k-specs { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; }
+.k-specs > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--k-rule); font-size: 14px; line-height: 1.6; }
+.k-specs dt { color: var(--k-ink-3); }
+.k-specs dd { margin: 0; overflow-wrap: anywhere; }
+.k-fair p { margin: 0 0 18px; font-size: 16px; line-height: 1.85; max-width: 40em; }
+.k-fair p strong { font-family: var(--k-font-num); font-size: 18px; font-weight: 500; }
+.k-fair dl { margin: 0; display: flex; flex-wrap: wrap; gap: 10px 32px; font-size: 13px; }
+.k-fair dl > div { display: flex; gap: 8px; align-items: center; }
+.k-fair dt { color: var(--k-ink-3); }
+.k-fair dd { margin: 0; }
+.k-fair dl a { color: var(--k-ink-2); min-height: 24px; display: inline-flex; align-items: center; }
+
+/* 同型號價格分布 (markup from dist.js distHTML) */
+.k-dist__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; padding-top: 24px; border-top: 1px solid var(--k-brass); margin-bottom: 14px; }
+.k-dist__head h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 22px; }
+.k-dist__toggle { font: inherit; font-size: 13px; color: var(--k-ink-2); background: transparent; border: 1px solid var(--k-rule-strong); border-radius: 2px; height: 32px; padding: 0 12px; cursor: pointer; }
+.k-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 12px; color: var(--k-ink-2); margin-bottom: 16px; }
+.k-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.k-legend i { display: block; box-sizing: border-box; }
+.k-legend .sale { width: 10px; height: 10px; border-radius: 50%; background: var(--k-chart-mark); }
+.k-legend .sold { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--k-chart-mark); }
+.k-legend .this { width: 12px; height: 12px; border-radius: 50%; background: var(--k-accent-ink); }
+.k-legend .median { width: 18px; height: 2px; background: var(--k-ink); }
+.k-dist__plot { position: relative; height: 300px; margin-left: 44px; }
+.k-dist__grid { position: absolute; left: 0; right: 0; height: 1px; background: var(--k-rule); }
+.k-dist__y { position: absolute; left: -44px; width: 38px; transform: translateY(-50%); text-align: right; font-size: 12px; color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.k-dist__median { position: absolute; width: 34px; margin-left: -17px; height: 2px; background: var(--k-ink); }
+.k-dot { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; display: flex; align-items: center; justify-content: center; }
+.k-dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; background: var(--k-chart-mark); box-shadow: 0 0 0 2px var(--k-paper); }
+.k-dot--sold::after { border: 2px solid var(--k-chart-mark); background: var(--k-paper); }
+.k-dot--this { z-index: 1; }
+.k-dot--this::after { width: 14px; height: 14px; background: var(--k-accent-ink); }
+.k-dist__this { position: absolute; transform: translate(14px, -50%); font-size: 12px; font-weight: 700; color: var(--k-accent-ink); white-space: nowrap; pointer-events: none; }
+.k-dist__tip { position: absolute; transform: translate(-50%, calc(-100% - 14px)); background: var(--k-surface); border: 1px solid var(--k-rule-strong); box-shadow: var(--k-shadow);
+  padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--k-ink); white-space: nowrap; pointer-events: none; z-index: 2; }
+.k-dist__tip .ja { font-family: var(--k-font-ja); }
+.k-dist__tip .k-price { font-size: 15px; font-weight: 400; }
+.k-dist__axis { display: grid; margin-left: 44px; margin-top: 10px; border-top: 1px solid var(--k-ink-3); }
+.k-dist__axis > div { text-align: center; padding-top: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.k-dist__axis b { font-family: var(--k-font-ja); font-size: 13px; color: var(--k-ink-2); font-weight: 400; }
+.k-dist__axis .is-this b { color: var(--k-ink); font-weight: 700; }
+.k-dist__axis small { font-size: 11px; color: var(--k-ink-3); }
+.k-dist__table { overflow-x: auto; }
+.k-dist__table table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+.k-dist__table thead th { text-align: left; font-weight: 400; color: var(--k-ink-3); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--k-ink-3); }
+.k-dist__table tbody th { text-align: left; font-weight: 600; font-family: var(--k-font-ja); padding: 10px 12px 10px 0; border-bottom: 1px solid var(--k-rule); white-space: nowrap; }
+.k-dist__table td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--k-rule); font-variant-numeric: tabular-nums; }
+.k-dist__table .def { color: var(--k-ink-2); }
+.k-dist__table .num { text-align: right; }
+.k-dist__table tr > :last-child { padding-right: 0; }
+
+/* 售價變化 */
+.k-hist { position: relative; height: 56px; margin: 0 8px; }
+.k-hist__line { position: absolute; left: 0; right: 0; top: 27px; height: 2px; background: var(--k-chart-mark); }
+.k-hist__start { position: absolute; left: 0; top: 22px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--k-chart-mark); box-shadow: 0 0 0 2px var(--k-paper); }
+.k-hist__now { position: absolute; right: 0; top: 22px; width: 12px; height: 12px; margin-right: -6px; border-radius: 50%; border: 2px solid var(--k-chart-mark); background: var(--k-paper); box-sizing: border-box; }
+.k-hist__label { position: absolute; left: 0; top: 0; font-size: 12px; color: var(--k-ink-3); }
+.k-hist__label--end { left: auto; right: 0; }
+.k-hist__price { position: absolute; left: 50%; top: 36px; transform: translateX(-50%); font-family: var(--k-font-num); font-size: 15px; font-variant-numeric: tabular-nums; }
+.k-hist__note { margin: 18px 0 0; font-size: 14px; color: var(--k-ink-2); }
+.k-hist--steps { height: 140px; }
+.k-hist__plot { position: absolute; left: 0; right: 0; top: 22px; bottom: 26px; }
+.k-hist__plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.k-hist__pt { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--k-chart-mark); box-shadow: 0 0 0 2px var(--k-paper); }
+.k-hist__pt--now { border: 2px solid var(--k-chart-mark); background: var(--k-paper); box-sizing: border-box; }
+.k-hist__ptlabel { position: absolute; transform: translate(-50%, calc(-100% - 10px)); font-family: var(--k-font-num); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.k-hist__ptlabel--start { transform: translate(-6px, calc(-100% - 10px)); }
+.k-hist__ptlabel--end { transform: translate(calc(-100% + 6px), calc(-100% - 10px)); }
+.k-hist--steps .k-hist__label { top: auto; bottom: 0; }
+
+/* 型號頁 (reuses .k-crumb, .k-detail__id/__brand/__sub, .k-dtrack, .k-sec__more, .k-row, .k-dist) */
+.k-model__top { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 48px; align-items: start; padding-bottom: 56px; }
+/* Padding keeps a photo clear of the inset frame; the icon alone would not need it. */
+.k-model__mat { aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
+  box-shadow: inset 0 0 0 8px var(--k-mat), inset 0 0 0 9px var(--k-mat-line);
+  display: flex; align-items: center; justify-content: center; color: var(--k-mat-ink); }
+.k-model__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-model__mat svg { width: 140px; height: 140px; }
+.k-model__info { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.k-mstats { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--k-rule); }
+.k-mstats > div { display: flex; flex-direction: column; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--k-rule); min-width: 0; }
+.k-mstats dt { font-size: 12px; color: var(--k-ink-3); }
+.k-mstats dd { margin: 0; }
+.k-mstat__v { font-family: var(--k-font-num); font-size: 22px; font-variant-numeric: var(--k-num); }
+.k-mstat__v.is-na { color: var(--k-ink-3); }
+.k-mstat__note { font-size: 12px; color: var(--k-ink-3); }
+.k-mtrack { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.k-mtrack > span { font-size: 12px; color: var(--k-ink-3); }
+.k-dtrack--model { height: 44px; font-size: 14px; }
+.k-dtrack--model svg { width: 17px; height: 17px; }
+/* The canvas bell stays outlined when pressed; the detail heart fills. */
+.k-dtrack--model[aria-pressed="true"] svg { fill: none; }
+.k-model__dist { max-width: 880px; }
+.k-msale__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; padding-top: 24px; border-top: 1px solid var(--k-brass); margin-bottom: 22px; }
+.k-msale__head h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 22px; }
+.k-msale__head h2 span { font-family: var(--k-font-ja); }
+.k-more { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* Browse (價格最美) — reuses .k-crumb, .k-card, .k-empty, .k-error */
+.k-field { font: inherit; font-size: 14px; color: var(--k-ink); background: var(--k-surface); border: 1px solid var(--k-rule-strong); border-radius: 2px; height: 38px; padding: 0 10px; box-sizing: border-box; width: 100%; }
+.k-field::placeholder { color: var(--k-ink-3); }
+.k-browse__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 0 0 24px; }
+.k-browse__head h1 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 30px; line-height: 1.3; }
+.k-browse__count { font-size: 14px; color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.k-bf { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 0 0 32px; }
+.k-bf label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--k-ink-3); }
+.k-bf__brand { width: 150px; }
+.k-bf__cat { width: 120px; }
+.k-bf__cond { width: 160px; }
+.k-bf__max { width: 130px; }
+.k-bf__q { flex: 1 1 180px; }
+.k-bf__sort { width: 150px; }
+.k-bf .k-switch { flex-direction: row; align-items: center; gap: 8px; height: 38px; font-size: 14px; color: var(--k-ink); white-space: nowrap; cursor: pointer; }
+.k-switch input { width: 18px; height: 18px; margin: 0; accent-color: var(--k-accent); }
+.k-bf--narrow { display: none; }
+.k-bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 48px 28px; }
+.k-bgrid > * { min-width: 0; }
+.k-bgrid[aria-busy="true"] { opacity: .6; }
+.k-bnone { margin: 0; padding: 24px 0 8px; font-size: 16px; color: var(--k-ink-2); }
+.k-bmore { display: flex; justify-content: center; padding-top: 36px; }
+.k-bmore button { height: 44px; padding: 0 24px; font: inherit; font-size: 14px; color: var(--k-ink); background: transparent; border: 1px solid var(--k-ink-2); border-radius: 2px; cursor: pointer; }
+.k-bmore button:disabled { opacity: .6; cursor: default; }
+
+/* 顧問: dock → floating panel (modal <dialog>) ⇄ full page. Markup in
+   index.html, behaviour and turn markup in js/advisor.js. */
+.k-adv-dock { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 20; height: 56px; padding: 0 10px; display: flex; align-items: center; gap: 12px;
+  white-space: nowrap; border: 1px solid var(--k-brass); border-radius: 999px; background: var(--k-surface); color: var(--k-ink); box-shadow: var(--k-shadow); font: inherit; cursor: pointer; text-align: left; }
+/* The canvas shows no dock while the panel is open. */
+body:has(.k-adv[open]) .k-adv-dock { visibility: hidden; }
+.k-adv__seal { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--k-accent); color: var(--k-on-accent); display: flex; align-items: center; justify-content: center; font-family: var(--k-font-ja); font-size: 18px; }
+.k-adv__seal--lg { width: 40px; height: 40px; font-size: 19px; }
+.k-adv-dock__label { font-family: var(--k-font-display); font-size: 16px; padding-right: 12px; }
+/* Author rules replace the UA's centred modal box (margin: auto, max sizes)
+   so the panel sits at the canvas position: bottom-centred, not mid-screen. */
+.k-adv { position: fixed; inset: auto; left: 50%; bottom: 24px; transform: translateX(-50%); margin: 0; padding: 0; box-sizing: border-box;
+  width: min(680px, 100vw - 16px); height: min(640px, 100dvh - 48px); max-width: none; max-height: none;
+  border: 1px solid var(--k-brass); border-radius: 16px; background: var(--k-surface); color: var(--k-ink); font-family: var(--k-font-ui); box-shadow: var(--k-shadow); overflow: hidden; }
+.k-adv[open] { display: flex; flex-direction: column; }
+/* Light: the canvas literal (ink at 18 %). The canvas has no dark advisor
+   artboard, so dark is token-driven until canvas pass 2 draws one: the same
+   ink veil would lighten a dark page instead of setting the panel off, so the
+   sunk paper dims it. */
+.k-adv::backdrop { background: rgba(30,25,21,.18); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .k-adv:not(.is-full)::backdrop { background: color-mix(in srgb, var(--k-paper-sunk) 60%, transparent); }
+}
+[data-theme="dark"] .k-adv:not(.is-full)::backdrop { background: color-mix(in srgb, var(--k-paper-sunk) 60%, transparent); }
+.k-adv.is-full::backdrop { background: transparent; }
+.k-adv.is-full { inset: 0; transform: none; width: 100%; height: 100%; border: 0; border-radius: 0; }
+/* The full panel covers the page; without this the root scrollbar stays
+   beside it (narrowing the panel) and the hidden page still wheel-scrolls. */
+html:has(.k-adv.is-full[open]) { overflow: hidden; }
+.k-adv__in { width: 100%; box-sizing: border-box; }
+.k-adv.is-full .k-adv__in { max-width: 720px; margin: 0 auto; }
+.k-adv__head { flex: none; border-bottom: 1px solid var(--k-rule); padding: 14px 12px 14px 20px; }
+.k-adv__bar { display: flex; align-items: center; gap: 12px; }
+.k-adv__title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.k-adv__title h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 18px; white-space: nowrap; }
+/* Focused on open on phones as a start point, not a control: no ring. */
+.k-adv__title h2:focus { outline: none; }
+.k-adv__demo { font-size: 11px; color: var(--k-ink-2); border: 1px dashed var(--k-rule-strong); padding: 0 7px; border-radius: 999px; }
+.k-adv__sp { flex: 1; }
+.k-adv__icon { flex: none; width: 36px; height: 36px; padding: 0; border: 0; background: transparent; color: var(--k-ink-2); display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 2px; }
+.k-adv__shrink, .k-adv.is-full .k-adv__expand { display: none; }
+.k-adv.is-full .k-adv__shrink { display: block; }
+/* relative: the containing block for absolutely positioned descendants (.k-sr
+   text in figures). Without it they resolve against the fixed dialog, outside
+   this scroller's clip, and give the dialog itself thousands of pixels of
+   overflow that any scroll-into-view then scrolls, header and all. */
+.k-adv__body { position: relative; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 26px 20px; }
+.k-adv__log, .k-adv__turn { display: flex; flex-direction: column; gap: 20px; }
+.k-adv__intro { margin: 0; font-size: 15px; line-height: 1.85; }
+.k-adv__prompts { display: flex; flex-wrap: wrap; gap: 8px; }
+.k-adv__prompts button { font: inherit; font-size: 14px; line-height: 1.5; color: var(--k-ink); background: transparent; border: 1px solid var(--k-rule-strong); border-radius: 999px; padding: 7px 14px; cursor: pointer; text-align: left; }
+.k-adv__user { align-self: flex-end; max-width: 80%; background: var(--k-paper-sunk); border-radius: 14px 14px 2px 14px; padding: 10px 14px; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.k-adv__steps { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--k-brass); display: flex; flex-direction: column; gap: 10px; }
+.k-adv__steps li { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--k-ink); }
+.k-adv__steps li.is-done { color: var(--k-ink-2); }
+.k-adv__who { font-size: 12px; color: var(--k-ink-3); white-space: nowrap; }
+.k-adv__ok { color: var(--k-ink-3); }
+.k-adv__answer { display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.85; overflow-wrap: anywhere; }
+.k-adv__answer p { margin: 0; }
+.k-adv__answer ul { margin: 0; padding-left: 1.2em; }
+/* inline-block: a chip wraps to the next line whole rather than splitting its
+   border across two lines; max-width lets a name longer than the line wrap
+   inside it. */
+.k-adv__chip { display: inline-block; max-width: 100%; box-sizing: border-box; line-height: 1.5; font-family: var(--k-font-ja); font-size: 13px; color: var(--k-accent-ink); background: var(--k-accent-wash); border: 1px solid var(--k-accent); border-radius: 2px; padding: 0 6px; text-decoration: none; }
+.k-adv__cursor { display: inline-block; width: 2px; height: 1.1em; background: var(--k-ink); vertical-align: -3px; margin-left: 2px; animation: k-blink 1s steps(1) infinite; }
+@keyframes k-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .k-adv__cursor { animation: none; } }
+.k-adv__err { margin: 0; color: var(--k-ink-2); }
+.k-adv__rec { margin: 4px 0; display: flex; flex-direction: column; gap: 14px; }
+.k-adv__mat { width: min(240px, 100%); aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
+  box-shadow: inset 0 0 0 6px var(--k-mat), inset 0 0 0 7px var(--k-mat-line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); }
+.k-adv__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.k-adv__recmeta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 10px 20px; }
+.k-adv__recid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.k-adv__brand { font-family: var(--k-font-num); font-size: 12px; letter-spacing: .16em; color: var(--k-ink-3); }
+.k-adv__name { font-family: var(--k-font-ja); font-size: 19px; font-weight: 600; color: var(--k-ink); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
+.k-adv__grade { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--k-ink-2); }
+.k-adv__grade .k-grade { color: var(--k-ink); }
+.k-adv__recprice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.k-adv__recprice .k-price { font-size: 20px; font-weight: 400; }
+.k-adv__recprice .k-badge { font-size: 12px; padding: 0 6px; line-height: 20px; gap: 5px; }
+.k-adv__recprice .k-badge--near, .k-adv__recprice .k-badge--above, .k-adv__recprice .k-badge--none { padding: 0; }
+.k-adv__pos { display: flex; flex-direction: column; gap: 6px; }
+.k-adv__poscap { font-size: 12px; color: var(--k-ink-3); }
+.k-adv__track { position: relative; height: 18px; }
+.k-adv__track::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--k-rule-strong); }
+.k-adv__med { position: absolute; top: 2px; width: 2px; height: 14px; margin-left: -1px; background: var(--k-ink); }
+.k-adv__this { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--k-accent-ink); box-shadow: 0 0 0 2px var(--k-surface); }
+.k-adv__ticks, .k-adv__medrow { position: relative; height: 16px; font-size: 11px; color: var(--k-ink-3); font-variant-numeric: tabular-nums; }
+.k-adv__ticks > span, .k-adv__medrow > span { position: absolute; white-space: nowrap; }
+.k-adv__ticks > span:first-child { left: 0; }
+.k-adv__ticks > span:last-child { right: 0; }
+.k-adv__medlabel { transform: translateX(-50%); color: var(--k-ink-2); }
+/* The narrow panel moves the median label to its own row above the track
+   (js/advisor.js emits both copies); in the ticks row it would overlap the
+   min and max labels. */
+.k-adv__medrow { display: none; }
+.k-adv__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.k-adv__btn { height: 36px; padding: 0 14px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; color: var(--k-ink);
+  background: transparent; border: 1px solid var(--k-ink-2); border-radius: 999px; text-decoration: none; cursor: pointer; }
+.k-adv__btn svg { width: 15px; height: 15px; }
+.k-adv__btn[aria-pressed="true"] { color: var(--k-accent-ink); background: var(--k-accent-wash); border-color: var(--k-accent); }
+.k-adv__btn[aria-pressed="true"] svg { fill: currentColor; }
+.k-adv__btn--shop { color: var(--k-on-accent); background: var(--k-accent); border-color: var(--k-accent); }
+.k-adv__btn--shop svg { width: 11px; height: 11px; }
+.k-adv__form { flex: none; border-top: 1px solid var(--k-rule); padding: 12px 12px 10px; }
+.k-adv__row { display: flex; gap: 8px; align-items: flex-end; }
+.k-adv__field { flex: 1 1 auto; display: flex; }
+.k-adv__field textarea { flex: 1 1 auto; resize: none; font: inherit; font-size: 15px; line-height: 1.5; color: var(--k-ink); background: var(--k-paper); border: 1px solid var(--k-rule-strong); border-radius: 2px; padding: 8px 10px; box-sizing: border-box; }
+.k-adv__send { flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--k-accent); color: var(--k-on-accent); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.k-adv__send:disabled { opacity: .5; cursor: default; }
+.k-adv__hint { margin: 6px 0 0; font-size: 12px; color: var(--k-ink-3); }
+
+/* 768–1023 has no artboard: three columns keep cards readable. */
+@media (max-width: 1023px) {
+  .k-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Mobile (canvas 375 artboards) */
+@media (max-width: 767px) {
+  .k-wrap { padding: 0 16px; }
+  .k-header { flex-wrap: nowrap; gap: 4px; padding: 14px 0 0; }
+  .k-search, .k-join { display: none; }
+  .k-search-icon { display: flex; }
+  .k-watch, .k-acct__name { display: none; }
+  /* Canvas NotificationsMobile: a sheet under the header. The max-height is a
+     guard the canvas does not draw — without it a short or landscape screen
+     would cut off the footer links with no way to scroll to them. */
+  .k-notif__panel { position: fixed; left: 8px; right: 8px; top: 64px; width: auto; max-height: calc(100dvh - 72px); overflow-y: auto; }
+  .k-sec h2 { font-size: 24px; }
+  .k-sec--first { padding: 24px 0 40px; }
+  .k-sec--ruled { padding: 0 0 40px; }
+  .k-row { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+  .k-row::-webkit-scrollbar { display: none; }
+  .k-row > * { flex: 0 0 200px; min-width: 0; }
+  .k-footer > .k-wrap { padding-bottom: 96px; }
+  .k-footer nav { grid-template-columns: repeat(2, minmax(0, max-content)); }
+  .k-crumb { padding: 16px 0 8px; }
+  /* stretch on both tops: the desktop grids' align-items: start would shrink
+     the mat (a photo-less listing or model shows only an icon) and the info
+     column to their content in this column layout. */
+  .k-detail__top { display: flex; flex-direction: column; align-items: stretch; gap: 24px; }
+  .k-detail__info h1, .k-model__info h1 { font-size: 26px; }
+  .k-method h1 { font-size: 26px; }
+  .k-method__dl > div { grid-template-columns: minmax(0, 1fr); }
+  .k-detail__mat svg { width: 120px; height: 120px; }
+  /* stretch: as .k-detail__top above. */
+  .k-model__top { display: flex; flex-direction: column; align-items: stretch; gap: 24px; padding-bottom: 40px; }
+  .k-model__mat svg { width: 110px; height: 110px; }
+  .k-detail__col { padding-top: 40px; }
+  .k-specs { grid-template-columns: 1fr; }
+  .k-adv-dock { bottom: 16px; }
+  .k-adv:not(.is-full) { left: 8px; right: 8px; bottom: 8px; transform: none; width: auto; height: min(600px, 100dvh - 16px); }
+  .k-adv__ticks .k-adv__medlabel { display: none; }
+  .k-adv__medrow { display: block; }
+  .k-browse__head h1 { font-size: 24px; }
+  .k-bf--wide { display: none; }
+  .k-bf--narrow { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 0 0 12px; }
+  .k-bf--narrow .k-field { height: 44px; }
+  .k-bf__bar { display: flex; gap: 10px; align-items: center; }
+  .k-bf--narrow .k-switch { height: 44px; }
+  .k-bf__toggle { flex: 1 1 0; height: 44px; font: inherit; font-size: 14px; color: var(--k-ink); background: var(--k-surface); border: 1px solid var(--k-rule-strong); border-radius: 2px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+  .k-bf__panel { display: flex; flex-direction: column; gap: 10px; }
+  .k-bgrid { display: flex; flex-direction: column; gap: 0; }
+  .k-bgrid > * { padding: 20px 0; border-bottom: 1px solid var(--k-rule); }
+  /* Same values as .k-card--row, applied here by width: the card markup is
+     shared across widths, and choosing the layout in JS would leave cards in
+     the wrong layout after a resize across 767px. */
+  .k-bgrid .k-card { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .k-bgrid .k-card__model { font-size: 16px; }
+  .k-bgrid .k-card__price .k-price { font-size: 15px; }
+}

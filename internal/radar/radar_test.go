@@ -1,6 +1,7 @@
 package radar
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func init() {
 	for _, r := range listing.Ranks() {
 		gs = append(gs, listing.Grade{Code: "等級" + string(r), Label: "等級" + string(r), DescZH: "測試", Rank: r})
 	}
-	listing.RegisterScheme(listing.Scheme{Source: "t", Name: "テスト", Graded: "店家鑑定", Grades: gs})
+	listing.RegisterScheme(listing.Scheme{Source: "t", Name: "テスト", Shop: "テスト店", Graded: "店家鑑定", Grades: gs})
 }
 
 func row(id string, code string, rank listing.Rank, price int64, firstDay int, prices ...int64) store.Row {
@@ -151,6 +152,12 @@ func TestDropsAndStats(t *testing.T) {
 	if len(drops) != 1 || drops[0].ID != "t:a" || drops[0].Drop.FromJPY != 120000 {
 		t.Fatalf("drops = %+v", drops)
 	}
+	if d := drops[0].Drop; d.FromTWD != 24000 || d.ToTWD != 20000 {
+		t.Errorf("drop TWD = %d → %d, want 24000 → 20000", d.FromTWD, d.ToTWD)
+	}
+	if drops[0].SourceName != "テスト店" {
+		t.Errorf("SourceName = %q", drops[0].SourceName)
+	}
 	s, items, ok := e.Model("LOUIS VUITTON", "M40156")
 	if !ok || len(items) != 3 || items[2].Status != "gone" {
 		t.Fatalf("model items = %+v", items)
@@ -160,6 +167,49 @@ func TestDropsAndStats(t *testing.T) {
 	}
 	if len(s.ByGrade) != 2 || s.ByGrade[0].Grade.Label != "等級A" || s.ByGrade[1].Grade.Label != "等級B" {
 		t.Errorf("ByGrade = %+v", s.ByGrade)
+	}
+	if g := s.ByGrade; g[0].MedianTWD != 20000 || g[0].MinTWD != 20000 || g[1].MaxTWD != 16000 {
+		t.Errorf("ByGrade TWD = %+v", g)
+	}
+	it, _, _ := e.Get("t:a")
+	if h := it.History; len(h) != 2 || h[0].PriceTWD != 24000 || h[1].PriceTWD != 20000 {
+		t.Errorf("History = %+v", h)
+	}
+}
+
+func TestIsDeal(t *testing.T) {
+	cases := []struct {
+		name string
+		fair *Valuation
+		want bool
+	}{
+		{"no valuation", nil, false},
+		{"5% high", &Valuation{DealPct: 0.05, Confidence: "high"}, true},
+		{"4.9% high", &Valuation{DealPct: 0.049, Confidence: "high"}, false},
+		{"20% medium", &Valuation{DealPct: 0.2, Confidence: "medium"}, true},
+		{"20% low", &Valuation{DealPct: 0.2, Confidence: "low"}, false},
+		{"anomaly", &Valuation{DealPct: 0.6, Confidence: "high", Anomaly: true}, false},
+	}
+	for _, c := range cases {
+		if got := IsDeal(&Item{Fair: c.fair}); got != c.want {
+			t.Errorf("%s: IsDeal = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestGone(t *testing.T) {
+	gone := func(id string, day int) store.Row {
+		r := row(id, "M40156", listing.RankA, 100000, 0)
+		r.Status, r.GoneAt = "gone", t0.AddDate(0, 0, day)
+		return r
+	}
+	e := engine(gone("g3", 3), row("a", "M40156", listing.RankA, 100000, 0), gone("g6", 6))
+	got := e.Gone(10)
+	if len(got) != 2 || got[0].ID != "t:g6" || got[1].ID != "t:g3" {
+		t.Fatalf("Gone(10) = %+v, want [t:g6 t:g3]", got)
+	}
+	if got := e.Gone(1); len(got) != 1 || got[0].ID != "t:g6" {
+		t.Errorf("Gone(1) = %+v", got)
 	}
 }
 
@@ -175,5 +225,104 @@ func TestSearchFilters(t *testing.T) {
 	}
 	if _, total := e.Search(Filter{Keywords: []string{"n41605"}}); total != 1 {
 		t.Errorf("keyword search total = %d", total)
+	}
+	all, _ := e.Search(Filter{Sort: "price_asc"})
+	page, total := e.Search(Filter{Sort: "price_asc", Offset: 1, Limit: 1})
+	if total != 3 || len(page) != 1 || page[0].ID != all[1].ID {
+		t.Errorf("offset page = %d %+v, want %s", total, page, all[1].ID)
+	}
+	if past, total := e.Search(Filter{Offset: 5}); total != 3 || len(past) != 0 {
+		t.Errorf("offset past end = %d %+v", total, past)
+	}
+	if o := e.Overview(); o.ByCategory["tote"] != 3 {
+		t.Errorf("ByCategory = %+v", o.ByCategory)
+	}
+}
+
+func TestNewestOrder(t *testing.T) {
+	at := func(id string, after time.Duration) store.Row {
+		r := row(id, "M40156", listing.RankA, 100000, 0)
+		r.FirstSeen = t0.Add(after)
+		return r
+	}
+	// The initial crawl pages newest first: i1 sits on an earlier page than
+	// i2, so it is the newer listing. w1 and w2 appeared after it.
+	initial := []store.Row{at("i2", time.Hour), at("i1", 0), at("i1b", 0)}
+	gone := at("w3", 60*time.Hour)
+	gone.Status, gone.GoneAt = "gone", gone.FirstSeen.Add(time.Hour)
+	e := engine(append(initial, at("w1", 30*time.Hour), at("w2", 50*time.Hour), gone)...)
+
+	ids := func(items []Item) (out []string) {
+		for _, it := range items {
+			out = append(out, it.ID)
+		}
+		return out
+	}
+	got, _ := e.Search(Filter{Sort: "newest"})
+	if want := []string{"t:w2", "t:w1", "t:i1", "t:i1b", "t:i2"}; !slices.Equal(ids(got), want) {
+		t.Errorf("newest = %v, want %v", ids(got), want)
+	}
+	_, items, _ := e.Model("LOUIS VUITTON", "M40156")
+	if n := e.NewestActive(items); n == nil || n.ID != "t:w2" {
+		t.Errorf("NewestActive = %+v, want t:w2 (gone t:w3 skipped)", n)
+	}
+
+	// First-sweep data only: the shop's newest is the first crawled.
+	e = engine(initial...)
+	_, items, _ = e.Model("LOUIS VUITTON", "M40156")
+	if n := e.NewestActive(items); n == nil || n.ID != "t:i1" {
+		t.Errorf("first sweep NewestActive = %+v, want t:i1", n)
+	}
+	if got, _ := e.Search(Filter{Sort: "newest", Limit: 1}); len(got) != 1 || got[0].ID != "t:i1" {
+		t.Errorf("first sweep newest = %v, want [t:i1]", ids(got))
+	}
+}
+
+func TestPhotoPending(t *testing.T) {
+	cases := map[string]bool{
+		"": true,
+		"https://x/Contents/ProductImages/NowPrinting_L.jpg": true,
+		"https://x/2101220285869_L.jpg":                      false,
+	}
+	for url, want := range cases {
+		r := row("p", "M40156", listing.RankA, 100000, 0)
+		r.ImageURL = url
+		it, _, _ := engine(r).Get("t:p")
+		if it.PhotoPending != want {
+			t.Errorf("PhotoPending(%q) = %v, want %v", url, it.PhotoPending, want)
+		}
+	}
+}
+
+func TestSoldStatsReady(t *testing.T) {
+	// One listing already gone in every case: sold rows alone do not open the
+	// gate, only the span from first to last observation does.
+	at := func(span time.Duration) *Engine {
+		a := row("a", "M40156", listing.RankA, 100000, 0)
+		a.LastSeen = a.FirstSeen.Add(span)
+		g := row("g", "M40156", listing.RankA, 100000, 0)
+		g.Status, g.GoneAt = "gone", g.FirstSeen.Add(24*time.Hour)
+		return engine(a, g)
+	}
+	for _, c := range []struct {
+		span time.Duration
+		want bool
+	}{{MinSoldHistory - time.Hour, false}, {MinSoldHistory, true}, {MinSoldHistory + 24*time.Hour, true}} {
+		e := at(c.span)
+		if got := e.SoldStatsReady(); got != c.want {
+			t.Errorf("span %v: SoldStatsReady = %v, want %v", c.span, got, c.want)
+		}
+		if o := e.Overview(); o.SoldStatsReady != c.want || o.Sold != 1 {
+			t.Errorf("span %v: Overview = %+v", c.span, o)
+		}
+	}
+	// A gone time past every last_seen still counts as an observation.
+	g := row("g", "M40156", listing.RankA, 100000, 0)
+	g.Status, g.GoneAt = "gone", g.FirstSeen.Add(MinSoldHistory)
+	if !engine(g).SoldStatsReady() {
+		t.Error("gone_at at MinSoldHistory: SoldStatsReady = false")
+	}
+	if (&Engine{}).SoldStatsReady() {
+		t.Error("empty index: SoldStatsReady = true")
 	}
 }

@@ -1,6 +1,8 @@
 package listing
 
 import (
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -8,8 +10,11 @@ import (
 // own label and definition rather than translating grades into a house scale:
 // a grade is the seller's judgement and should be presented as such.
 type Grade struct {
-	Code   string `json:"code"`    // stable key stored with listings (the source's label)
-	Label  string `json:"label"`   // as shown by the source, e.g. ランクA
+	Code  string `json:"code"`  // stable key stored with listings (the source's label)
+	Label string `json:"label"` // as shown by the source, e.g. ランクA
+	// Short is a compact label for tight grade ladders (e.g. "A" for ランクA);
+	// empty means use Label. Never shown without the full label nearby.
+	Short  string `json:"short,omitempty"`
 	DescJA string `json:"desc_ja"` // the source's own definition, verbatim
 	DescZH string `json:"desc_zh"` // Traditional Chinese translation of DescJA
 	// Rank places the grade on Kura's internal scale. It is only a bridge for
@@ -22,6 +27,7 @@ type Grade struct {
 type Scheme struct {
 	Source string  `json:"source"`
 	Name   string  `json:"name"`   // e.g. "BRAND OFF 商品ランク"
+	Shop   string  `json:"shop"`   // the source's display name, e.g. "BRAND OFF"
 	Graded string  `json:"graded"` // who assigns grades, e.g. "店家鑑定" or "賣家自評"
 	Ref    string  `json:"ref"`    // where the definitions come from
 	Grades []Grade `json:"grades"` // best first
@@ -55,6 +61,18 @@ func SchemeFor(source string) (Scheme, bool) {
 	defer schemesMu.RUnlock()
 	s, ok := schemes[source]
 	return s, ok
+}
+
+// Schemes returns every registered grading scheme, ordered by source.
+func Schemes() []Scheme {
+	schemesMu.RLock()
+	defer schemesMu.RUnlock()
+	out := make([]Scheme, 0, len(schemes))
+	for _, s := range schemes {
+		out = append(out, s)
+	}
+	slices.SortFunc(out, func(a, b Scheme) int { return strings.Compare(a.Source, b.Source) })
+	return out
 }
 
 // GradeFor resolves a stored grade code for a source. Unknown codes come back

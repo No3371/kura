@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kura 商品卡狀態</title>
+<script>try{var t=new URLSearchParams(location.search).get("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=LXGW+WenKai+TC&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;600&family=Shippori+Mincho:wght@400;600&display=swap">
+<link rel="stylesheet" href="/kura.css">
+<style>
+.dev-sec { padding: 48px 40px 56px; display: flex; flex-direction: column; gap: 28px; font-family: var(--k-font-ui); }
+.dev-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; border-bottom: 1px solid var(--k-brass); padding-bottom: 14px; }
+.dev-head h2 { margin: 0; font-family: var(--k-font-display); font-weight: 400; font-size: 24px; }
+.dev-head span { font-size: 12px; color: var(--k-ink-3); }
+.dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 32px; align-items: start; }
+.dev-cell { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dev-label { font-size: 12px; letter-spacing: .1em; color: var(--k-ink-3); }
+.dev-narrow { max-width: 375px; }
+@media (max-width: 767px) { .dev-sec { padding: 32px 16px 40px; } }
+</style>
+<script type="module" src="/dev/cards.js"></script>
+</head>
+<body>
+<main>
+  <section class="dev-sec" data-theme="light" data-rows>
+    <div class="dev-head"><h2>商品卡 · 日間</h2><span>狀態示意：資料取自範例商品；降價、售出、照片準備中為示意，不是真實紀錄</span></div>
+    <div class="dev-grid"></div>
+  </section>
+  <section class="dev-sec" data-theme="dark" data-rows>
+    <div class="dev-head"><h2>商品卡 · 夜間</h2><span>狀態示意：資料取自範例商品；降價、售出、照片準備中為示意，不是真實紀錄</span></div>
+    <div class="dev-grid"></div>
+  </section>
+  <section class="dev-sec" data-theme="light">
+    <div class="dev-head"><h2>商品卡 · 列表版型</h2><span>狀態示意：資料取自範例商品</span></div>
+    <div class="dev-narrow" id="row-card"></div>
+  </section>
+</main>
+</body>
+</html>

@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -38,7 +40,7 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	sub, _ := fs.Sub(static, "static")
-	mux.Handle("GET /", http.FileServerFS(sub))
+	mux.Handle("GET /", spaFallback(sub))
 
 	mux.HandleFunc("GET /api/overview", s.api(s.overview))
 	mux.HandleFunc("GET /api/listings", s.api(s.listings))
@@ -46,9 +48,72 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/drops", s.api(s.drops))
 	mux.HandleFunc("GET /api/models", s.api(s.models))
 	mux.HandleFunc("GET /api/models/{brand}/{key}", s.api(s.model))
+	mux.HandleFunc("GET /api/member", s.api(s.member))
 	mux.HandleFunc("POST /api/crawl", s.api(s.crawl))
 	mux.HandleFunc("POST /api/chat", s.chat)
 	return mux
+}
+
+func init() {
+	// On Windows the mime package reads the registry, which can map .js to
+	// text/plain; browsers refuse to run a module script served that way.
+	mime.AddExtensionType(".js", "text/javascript; charset=utf-8")
+	mime.AddExtensionType(".css", "text/css; charset=utf-8")
+}
+
+// spaFallback serves embedded files as they are and answers any other GET with
+// index.html, so client routes (/browse, /listing/{id}) survive a reload or a
+// pasted link. Missing assets stay 404, since index.html there would hand HTML
+// to fetch(), <script> or <link>: /api/ paths, anything under an embedded
+// directory (js/, dev/, legacy/), and names with an asset extension.
+//
+// "Has any extension" is not the asset test: model codes carry dots
+// (191502BZJ.04LU), and a route keyed by one would render through in-app
+// navigation yet 404 on reload. Directories are served only when they hold an
+// index.html; any other directory would answer with a file listing.
+func spaFallback(root fs.FS) http.Handler {
+	files := http.FileServerFS(root)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if name == "" {
+			name = "."
+		}
+		if fi, err := fs.Stat(root, name); err == nil {
+			if fi.IsDir() && !exists(root, path.Join(name, "index.html")) {
+				http.NotFound(w, r)
+				return
+			}
+			files.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") || underAssetDir(root, name) ||
+			assetExt[strings.ToLower(path.Ext(name))] {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFileFS(w, r, root, "index.html")
+	})
+}
+
+var assetExt = map[string]bool{
+	".js": true, ".mjs": true, ".css": true, ".map": true, ".json": true, ".html": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".svg": true, ".ico": true,
+	".woff": true, ".woff2": true, ".ttf": true, ".txt": true,
+}
+
+func exists(root fs.FS, name string) bool {
+	_, err := fs.Stat(root, name)
+	return err == nil
+}
+
+// underAssetDir reports whether name sits below a top-level embedded directory.
+func underAssetDir(root fs.FS, name string) bool {
+	dir, _, nested := strings.Cut(name, "/")
+	if !nested {
+		return false
+	}
+	fi, err := fs.Stat(root, dir)
+	return err == nil && fi.IsDir()
 }
 
 type apiFunc func(r *http.Request) (any, int, error)
@@ -109,6 +174,13 @@ func (s *Server) overview(r *http.Request) (any, int, error) {
 		"overview": s.Radar.Overview(), "fx": s.FX.Current(), "advisor": s.Advisor.Mode(),
 		"runs": runs, "crawling": s.crawling.Load(), "can_crawl": s.Crawl != nil,
 		"brands": brands, "categories": cats,
+		// The radar's own thresholds, for the pages that explain them (行情怎麼算,
+		// the detail page's 行情估價 prose): stated from here, never typed into copy.
+		"method": map[string]any{
+			"deal_min_pct": radar.DealMinPct, "anomaly_pct": radar.AnomalyPct,
+			"min_comps": radar.MinComps, "min_sold_history_days": int(radar.MinSoldHistory / (24 * time.Hour)),
+		},
+		"schemes": listing.Schemes(), // each shop's grade ladder, verbatim
 	}, 0, nil
 }
 
@@ -118,7 +190,7 @@ func (s *Server) listings(r *http.Request) (any, int, error) {
 		Brand: q.Get("brand"), Category: q.Get("category"), ModelCode: q.Get("model_code"),
 		MinRank: q.Get("min_rank"), MinPriceTWD: intParam(r, "min_twd"), MaxPriceTWD: intParam(r, "max_twd"),
 		OnlyDeals: q.Get("deals") == "1", IncludeGone: q.Get("gone") == "1",
-		Sort: q.Get("sort"), Limit: int(intParam(r, "limit")),
+		Sort: q.Get("sort"), Offset: int(intParam(r, "offset")), Limit: int(intParam(r, "limit")),
 	}
 	if kw := strings.TrimSpace(q.Get("q")); kw != "" {
 		f.Keywords = strings.Fields(kw)
@@ -132,7 +204,11 @@ func (s *Server) listing(r *http.Request) (any, int, error) {
 	if !ok {
 		return nil, http.StatusNotFound, httpError{"listing not found"}
 	}
-	return map[string]any{"item": it, "model": stats}, 0, nil
+	res := map[string]any{"item": it, "model": stats}
+	if sc, ok := listing.SchemeFor(it.Source); ok {
+		res["scheme"] = sc // the shop's full grade ladder for the 鑑定卡
+	}
+	return res, 0, nil
 }
 
 func (s *Server) drops(r *http.Request) (any, int, error) {
@@ -152,7 +228,14 @@ func (s *Server) model(r *http.Request) (any, int, error) {
 	if !ok {
 		return nil, http.StatusNotFound, httpError{"model not found"}
 	}
-	return map[string]any{"model": stats, "items": items}, 0, nil
+	res := map[string]any{"model": stats, "items": items}
+	// A group holds one shop's listings while a single provider is ingested,
+	// so its first item names the ladder. With several shops the distribution
+	// needs one ladder per shop, not this single field.
+	if sc, ok := listing.SchemeFor(items[0].Source); ok {
+		res["scheme"] = sc
+	}
+	return res, 0, nil
 }
 
 func (s *Server) crawl(r *http.Request) (any, int, error) {

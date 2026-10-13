@@ -93,6 +93,13 @@ gone, and reappearing items are reactivated. Time-to-sell only counts items Kura
 saw being listed (first seen after the initial crawl), because older stock has an unknown
 listing date.
 
+### Newest listings
+最新上架 (Home's shelf, Browse's newest sort, the advisor's `newest`, the demo member's
+新上架) is one order. Listings Kura saw appear after the initial crawl come first, latest
+first. The initial crawl's own first-seen times are only crawl order, and list pages are
+swept newest first, so among those listings the *earliest* first seen is the shop's newest.
+Listings first seen in the same second (about one list page) fall back to id order.
+
 ### Fair value with honest confidence
 - **Comparables** are the same brand and model code (or model name when there's no code),
   covering active listings plus items gone within 180 days.
@@ -167,6 +174,7 @@ default delay.
 | `GET /api/listings/{id}` | One listing with price history and model stats |
 | `GET /api/models?brand=` · `GET /api/models/{brand}/{key}` | Per-model statistics |
 | `GET /api/drops` | Recent price cuts |
+| `GET /api/member` | Demo member 林小姐: a watchlist picked from live models and listings, the price cuts and sales the crawl observed on it, and each tracked model's newest listing (see *Newest listings*) |
 | `POST /api/chat` `{session, message}` | Advisor, streamed as Server-Sent Events |
 | `POST /api/crawl` | Start a crawl in the background |
 

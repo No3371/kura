@@ -292,11 +292,11 @@ function historyChart(host, hist) {
   const rate = OV.fx.Rate;
   host.innerHTML = `<div class="chart-title"><h4>售價變化</h4><span class="muted" style="font-size:12px">以目前匯率換算</span></div>`;
   if (hist.length < 2) {
-    host.insertAdjacentHTML("beforeend", `<p class="muted" style="margin:4px 0 6px;font-size:14px">自 ${hist[0] ? new Date(hist[0].At).toLocaleDateString("zh-TW") : "—"} 首次看到以來，售價沒有變動。</p>`);
+    host.insertAdjacentHTML("beforeend", `<p class="muted" style="margin:4px 0 6px;font-size:14px">自 ${hist[0] ? new Date(hist[0].at).toLocaleDateString("zh-TW") : "—"} 首次看到以來，售價沒有變動。</p>`);
     return;
   }
-  const pts = [...hist, { At: new Date().toISOString(), PriceJPY: hist[hist.length - 1].PriceJPY, now: true }]
-    .map((p) => ({ t: new Date(p.At).getTime(), v: Math.round(p.PriceJPY * rate), now: p.now }));
+  const pts = [...hist, { at: new Date().toISOString(), price_jpy: hist[hist.length - 1].price_jpy, now: true }]
+    .map((p) => ({ t: new Date(p.at).getTime(), v: Math.round(p.price_jpy * rate), now: p.now }));
   const W = 680, H = 180, m = { l: 56, r: 16, t: 12, b: 26 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
@@ -323,7 +323,7 @@ function historyChart(host, hist) {
     if (!h) return tip.hide();
     const p = pts[+h.dataset.i], src = hist[+h.dataset.i];
     const box = host.getBoundingClientRect(), c = h.getBoundingClientRect();
-    tip.show(`<b class="num">${twd(p.v)}</b> · ${jpy(src.PriceJPY)}<br><span class="muted">${new Date(p.t).toLocaleString("zh-TW")}</span>`, c.left - box.left + c.width / 2, c.top - box.top);
+    tip.show(`<b class="num">${twd(p.v)}</b> · ${jpy(src.price_jpy)}<br><span class="muted">${new Date(p.t).toLocaleString("zh-TW")}</span>`, c.left - box.left + c.width / 2, c.top - box.top);
   });
   svgEl.addEventListener("mouseleave", () => tip.hide());
 }
