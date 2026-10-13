@@ -75,7 +75,7 @@ func (c *Claude) params(messages []anthropic.BetaMessageParam) anthropic.BetaMes
 func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(Event)) error {
 	s := c.sessions.get(sessionID)
 	if !s.mu.TryLock() {
-		return errors.New("這個對話還在回覆上一則訊息，請稍候")
+		return shopperErr("這個對話還在回覆上一則訊息，請稍候", nil)
 	}
 	defer s.mu.Unlock()
 
@@ -102,10 +102,10 @@ func (c *Claude) run(ctx context.Context, s *conversation[anthropic.BetaMessageP
 		case anthropic.BetaStopReasonToolUse:
 			// fall through to tool execution below
 		case anthropic.BetaStopReasonRefusal:
-			return errors.New("這個請求無法處理，請換個方式描述您想找的包款")
+			return shopperErr("這個請求無法處理，請換個方式描述您想找的包款", nil)
 		case anthropic.BetaStopReasonMaxTokens:
 			// Tool input may be truncated; never execute it.
-			return errors.New("回覆過長被截斷，請把問題縮小一些再試一次")
+			return shopperErr("回覆過長被截斷，請把問題縮小一些再試一次", nil)
 		default:
 			c.Log.Info("advisor turn", "rounds", round, "in", msg.Usage.InputTokens, "out", msg.Usage.OutputTokens,
 				"cache_read", msg.Usage.CacheReadInputTokens)
@@ -135,7 +135,7 @@ func (c *Claude) run(ctx context.Context, s *conversation[anthropic.BetaMessageP
 		// All results go back in one user turn so parallel calls stay parallel.
 		s.messages = append(s.messages, anthropic.NewBetaUserMessage(results...))
 	}
-	return fmt.Errorf("查詢步驟過多（超過 %d 輪），請把問題拆小一點", maxToolRounds)
+	return shopperErr(fmt.Sprintf("查詢步驟過多（超過 %d 輪），請把問題拆小一點", maxToolRounds), nil)
 }
 
 // stream runs one model call, forwarding text deltas as they arrive.
@@ -164,11 +164,11 @@ func describeAPIError(err error) error {
 	if apiErr, ok := errors.AsType[*anthropic.Error](err); ok {
 		switch apiErr.StatusCode {
 		case 401, 403:
-			return fmt.Errorf("Claude API 驗證失敗，請確認 ANTHROPIC_API_KEY（%w）", err)
+			return shopperErr("顧問暫時無法使用，請稍後再試", fmt.Errorf("Claude API 驗證失敗，請確認 ANTHROPIC_API_KEY: %w", err))
 		case 429:
-			return fmt.Errorf("Claude API 請求過於頻繁，請稍後再試（%w）", err)
+			return shopperErr("目前詢問的人較多，請稍後再試", err)
 		case 529:
-			return fmt.Errorf("Claude API 目前負載過高，請稍後再試（%w）", err)
+			return shopperErr("顧問目前忙碌中，請稍後再試", err)
 		}
 	}
 	return err

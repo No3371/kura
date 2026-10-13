@@ -316,7 +316,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	if err := s.Advisor.Chat(ctx, req.Session, req.Message, emit); err != nil {
 		s.Log.Warn("advisor", "err", err)
-		emit(advisor.Event{Type: "error", Text: err.Error()})
+		emit(advisor.Event{Type: "error", Text: advisor.Public(err)})
 	}
 	emit(advisor.Event{Type: "done"})
 	s.Log.Info("chat", "mode", s.Advisor.Mode(), "took", time.Since(start).Round(time.Millisecond))
