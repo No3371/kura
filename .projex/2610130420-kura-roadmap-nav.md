@@ -155,7 +155,8 @@ Working local app, single provider (BRAND OFF, one crawl sweep), **canvas UI bui
   - Not started — sprint ships one `image_url` per listing + 店家照片準備中 for pending photos (def L3 *Sprint provisional*)
 - [ ] Real-derived market signals: median days-to-sell, sell-through, 已售出, 30-day trend, same-model distribution — radar already computes sell-through + median days-to-sell (`internal/radar/radar.go`), trend from stored price history; canvas `trends: hidden` / 資料不足 states until enough history; one source shared by UI + advisor
   - Partial — sprint iters 2–4: same-model distribution (`dist.js`, server TWD) + per-listing 售價變化 live; 已售出 / 平均找到新主人 in 資料不足 behind `radar.MinSoldHistory` 14 d (provisional, def L4), advisor withholds sold stats on the same `SoldStatsReady()` (one source ✓). 30-day trend not built (canvas places it in the hidden 大家都在找 tile). Real values need Phase 1 crawl history
-- [ ] Mocked user-dependent signals: 大家都在找 shelf / 「這週 N 人在找」 demand (def: mocked — needs users; unlabelled in UI pending def L2 confirmation, disclosed on 行情怎麼算)
+- [x] Mocked user-dependent signals: 大家都在找 shelf / 「這週 N 人在找」 demand (def: mocked — needs users; unlabelled in UI pending def L2 confirmation, disclosed on 行情怎麼算)
+  - 2026-10-13: seeded weekly demand over real models (`internal/web/wanted.go`); Home shelf + model page line; see def L3 Home sections
   - Not built — blocked on ranking definition (human; def L3 Home sections) → Home `trends: hidden`, model demand line omitted. 行情怎麼算 already discloses demand as mocked
 - ~~Mocked market signals: 大家都在找 demand, 30-day trends, days-to-sell~~ — superseded 2026-10-13: trends + days-to-sell derive from crawl history (def Real-derived)
 

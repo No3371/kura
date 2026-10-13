@@ -4,10 +4,11 @@ import { distHTML } from "./dist.js";
 
 // Model page (型號頁) at /model/{brand}/{group_key}. Every figure comes from
 // the server (model stats, overview) already in TWD; the page converts and
-// recomputes nothing. 「這週 N 人在找」 is not rendered: demand has no real
-// source yet, and sample values on the page would pass for data (as with
-// Home's 大家都在找). For the same reason the crumb names this model rather
-// than the hidden 大家都在找 shelf, which would state a path nobody took.
+// recomputes nothing. 「這週 N 人在找」 is seeded demand from the same server
+// function as Home's 大家都在找 (wanted.go), so a model reads one number on
+// both. The crumb names this model rather than the 大家都在找 shelf: most
+// visits arrive from a listing page, and the shelf would state a path nobody
+// took.
 
 const CAP = 5; // one desktop row of cards, as the canvas draws 在售的 {model}
 
@@ -26,7 +27,7 @@ export async function renderModel(main, ov, rawBrand, rawKey) {
   } catch {
     throw Object.assign(new Error("bad model path"), { status: 404 });
   }
-  const { model: s, items, scheme } = await api(`/api/models/${encodeURIComponent(brand)}/${encodeURIComponent(key)}`);
+  const { model: s, items, scheme, seekers } = await api(`/api/models/${encodeURIComponent(brand)}/${encodeURIComponent(key)}`);
 
   const name = s.model_name || s.model_code || key;
   const brandZH = ov.brands?.find((b) => b.name === s.brand)?.zh;
@@ -54,6 +55,7 @@ export async function renderModel(main, ov, rawBrand, rawKey) {
         <h1>${esc(name)}</h1>
         ${sub ? `<span class="k-detail__sub">${esc(sub)}</span>` : ""}
       </div>
+      <p class="k-model__heat">這週 ${num(seekers)} 人在找</p>
       <dl class="k-mstats">${tilesHTML(s, ov)}</dl>
       <div class="k-mtrack">
         <button type="button" class="k-dtrack k-dtrack--model" data-track="${esc(trackKey)}" aria-pressed="${on}">${BELL}<span data-track-text="追蹤這個型號">${on ? "追蹤中" : "追蹤這個型號"}</span></button>

@@ -49,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/models", s.api(s.models))
 	mux.HandleFunc("GET /api/models/{brand}/{key}", s.api(s.model))
 	mux.HandleFunc("GET /api/member", s.api(s.member))
+	mux.HandleFunc("GET /api/wanted", s.api(s.wanted))
 	mux.HandleFunc("POST /api/crawl", s.api(s.crawl))
 	mux.HandleFunc("POST /api/chat", s.chat)
 	return mux
@@ -228,7 +229,9 @@ func (s *Server) model(r *http.Request) (any, int, error) {
 	if !ok {
 		return nil, http.StatusNotFound, httpError{"model not found"}
 	}
-	res := map[string]any{"model": stats, "items": items}
+	// seekers is seeded demand (wanted.go), apart from the stats so the
+	// advisor, which reads ModelStats, never takes it for data.
+	res := map[string]any{"model": stats, "items": items, "seekers": s.modelSeekers(stats)}
 	// A group holds one shop's listings while a single provider is ingested,
 	// so its first item names the ladder. With several shops the distribution
 	// needs one ladder per shop, not this single field.
