@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
-	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
@@ -45,50 +43,17 @@ type Claude struct {
 	Tools  *Tools
 	Log    *slog.Logger
 
-	mu       sync.Mutex
-	sessions map[string]*session
+	sessions sessionStore[anthropic.BetaMessageParam]
 	system   string
 	tools    []anthropic.BetaToolUnionParam
 }
 
-type session struct {
-	mu       sync.Mutex // one in-flight turn per session
-	messages []anthropic.BetaMessageParam
-	used     time.Time
-}
-
 func NewClaude(client anthropic.Client, model string, tools *Tools, log *slog.Logger) *Claude {
 	return &Claude{Client: client, Model: model, Tools: tools, Log: log,
-		sessions: map[string]*session{}, system: buildSystemPrompt(), tools: toolDefs()}
+		system: buildSystemPrompt(), tools: toolDefs()}
 }
 
 func (c *Claude) Mode() string { return "claude:" + c.Model }
-
-func (c *Claude) session(id string) *session {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	s, ok := c.sessions[id]
-	if !ok {
-		if len(c.sessions) >= maxSessions {
-			c.evictOldest()
-		}
-		s = &session{}
-		c.sessions[id] = s
-	}
-	s.used = time.Now()
-	return s
-}
-
-func (c *Claude) evictOldest() {
-	var oldest string
-	var at time.Time
-	for id, s := range c.sessions {
-		if oldest == "" || s.used.Before(at) {
-			oldest, at = id, s.used
-		}
-	}
-	delete(c.sessions, oldest)
-}
 
 func (c *Claude) params(messages []anthropic.BetaMessageParam) anthropic.BetaMessageNewParams {
 	return anthropic.BetaMessageNewParams{
@@ -108,7 +73,7 @@ func (c *Claude) params(messages []anthropic.BetaMessageParam) anthropic.BetaMes
 }
 
 func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(Event)) error {
-	s := c.session(sessionID)
+	s := c.sessions.get(sessionID)
 	if !s.mu.TryLock() {
 		return errors.New("這個對話還在回覆上一則訊息，請稍候")
 	}
@@ -125,7 +90,7 @@ func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(
 	return err
 }
 
-func (c *Claude) run(ctx context.Context, s *session, emit func(Event)) error {
+func (c *Claude) run(ctx context.Context, s *conversation[anthropic.BetaMessageParam], emit func(Event)) error {
 	for round := 0; round <= maxToolRounds; round++ {
 		msg, err := c.stream(ctx, s.messages, emit)
 		if err != nil {

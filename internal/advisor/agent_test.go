@@ -170,7 +170,7 @@ func TestAgentLoopRunsToolsAndStreams(t *testing.T) {
 	}
 
 	// History persists for the next turn: 4 messages after a completed turn.
-	if n := len(c.sessions["s1"].messages); n != 4 {
+	if n := len(c.sessions.m["s1"].messages); n != 4 {
 		t.Errorf("session history = %d messages, want 4", n)
 	}
 }
@@ -198,7 +198,7 @@ func TestAgentRollsBackFailedTurn(t *testing.T) {
 	if err := c.Chat(context.Background(), "s", "hello", func(Event) {}); err == nil {
 		t.Fatal("expected an error")
 	}
-	if n := len(c.sessions["s"].messages); n != 0 {
+	if n := len(c.sessions.m["s"].messages); n != 0 {
 		t.Errorf("history after failed turn = %d messages, want 0", n)
 	}
 }

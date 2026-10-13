@@ -46,7 +46,7 @@ flowchart LR
 | `internal/listing` | Source-independent model: condition ranks, categories, brand aliases (EN/中/日) |
 | `internal/store` | SQLite schema and queries (pure-Go driver, no cgo) |
 | `internal/radar` | Fair value, deal score, confidence, drops, per-model stats |
-| `internal/advisor` | Claude agent, tool implementations, offline mock |
+| `internal/advisor` | Claude and OpenAI agents, tool implementations, offline mock |
 | `internal/web` | API, SSE chat endpoint, embedded vanilla-JS UI |
 
 ## Design decisions worth reading
@@ -136,10 +136,13 @@ Listings first seen in the same second (about one list page) fall back to id ord
 - **Robustness.** Server-side refusal fallback (`fallbacks: "default"`) and prompt caching on
   the static system prompt and tools. Conversation history is append-only, and a failed
   turn rolls back so the session stays valid.
-- **Mock mode.** Without `ANTHROPIC_API_KEY`, a rule-based advisor runs the same search
+- **OpenAI mode.** With `OPENAI_API_KEY` (or `-advisor openai`) the same prompt, tools and
+  tool runner drive the OpenAI Chat Completions API over plain HTTP (`openai.go`);
+  `OPENAI_BASE_URL` targets any compatible endpoint.
+- **Mock mode.** With neither key, a rule-based advisor runs the same search
   tool, so the whole demo works offline.
-- **Tested without a key.** `agent_test.go` replays scripted SSE from a fake Messages API
-  and asserts the request shape and the tool round trip.
+- **Tested without a key.** `agent_test.go` and `openai_test.go` replay scripted SSE from
+  fake Messages / Chat Completions APIs and assert the request shape and the tool round trip.
 
 ## Running it
 
@@ -148,7 +151,7 @@ Requires Go 1.26+.
 ```bash
 go build -o kura ./cmd/kura
 ./kura crawl -brands "HERMES,CHANEL,LOUIS VUITTON" -details 100
-export ANTHROPIC_API_KEY=sk-ant-...      # optional; without it the advisor runs in mock mode
+export ANTHROPIC_API_KEY=sk-ant-...      # optional; or OPENAI_API_KEY; with neither the advisor runs in mock mode
 ./kura serve -crawl-every 6h             # keeps the radar fresh; price drops and sold items appear from the 2nd crawl on
 ```
 
@@ -159,7 +162,10 @@ export ANTHROPIC_API_KEY=sk-ant-...      # optional; without it the advisor runs
 | `-delay` | `3s` | Minimum gap between requests (robots.txt `Crawl-delay` wins if longer) |
 | `-max-pages` | `0` (all) | Cap pages per brand; capped sweeps never mark items sold |
 | `-details` | `150` | Product pages fetched per crawl (colour, size, accessories) |
-| `-model` | `claude-opus-5-5` (`KURA_MODEL`) | Advisor model |
+| `-advisor` | `auto` (`KURA_ADVISOR`) | `claude`, `openai` or `mock`; auto picks by which API key is set (Claude first) |
+| `-model` | `claude-opus-5-5` (`KURA_MODEL`) | Claude advisor model |
+| `-openai-model` | `gpt-5.4` (`KURA_OPENAI_MODEL`) | OpenAI advisor model |
+| `-openai-effort` | unset (`KURA_OPENAI_EFFORT`) | `reasoning_effort` for reasoning models; unset = not sent |
 | `-crawl-every` | off | Background crawl interval while serving |
 
 A full sweep of the six default brands is roughly 300 list pages, about 20 minutes at the

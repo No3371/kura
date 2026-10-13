@@ -58,19 +58,27 @@ func buildSystemPrompt() string {
 // pctText formats a fraction as a whole percent, e.g. 0.05 → "5".
 func pctText(f float64) string { return strconv.Itoa(int(math.Round(f * 100))) }
 
-func toolDefs() []anthropic.BetaToolUnionParam {
+// toolSpec is one advisor tool, independent of the model provider; each
+// agent converts the list to its API's shape.
+type toolSpec struct {
+	Name, Description string
+	Properties        map[string]any
+	Required          []string
+}
+
+func toolSpecs() []toolSpec {
 	var catKeys []string
 	for _, c := range listing.Categories {
 		catKeys = append(catKeys, c.Key)
 	}
 	ranks := []string{"N", "S", "SA", "A", "AB", "B", "BC", "C"}
-	defs := []anthropic.BetaToolParam{
+	return []toolSpec{
 		{
 			Name: "search_listings",
-			Description: anthropic.String("Search active pre-owned bag listings. Every filter is optional. " +
+			Description: "Search active pre-owned bag listings. Every filter is optional. " +
 				"Returns matches with TWD/JPY price, condition, fair-value estimate (fair_twd, deal_pct, confidence) and specs. " +
-				"Titles are Japanese: put katakana, English names or model codes in keywords."),
-			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"Titles are Japanese: put katakana, English names or model codes in keywords.",
+			Properties: map[string]any{
 				"brand":         map[string]any{"type": "string", "description": "Brand name, e.g. LOUIS VUITTON, HERMES, CHANEL"},
 				"category":      map[string]any{"type": "string", "enum": catKeys},
 				"keywords":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Any-match keywords (katakana model names, model codes, colours, materials)"},
@@ -81,38 +89,44 @@ func toolDefs() []anthropic.BetaToolUnionParam {
 				"only_deals":    map[string]any{"type": "boolean", "description": "Only listings at least " + pctText(radar.DealMinPct) + "% below fair value"},
 				"sort":          map[string]any{"type": "string", "enum": []string{"deal", "price_asc", "price_desc", "newest"}},
 				"limit":         map[string]any{"type": "integer", "minimum": 1, "maximum": 10},
-			}},
+			},
 		},
 		{
 			Name: "model_price_stats",
-			Description: anthropic.String("Market statistics for one model: price by condition rank, how many sold, " +
+			Description: "Market statistics for one model: price by condition rank, how many sold, " +
 				"sell-through and median days to sell, plus the cheapest active listings. " +
-				"Sold count, sell-through and days to sell are omitted (sold_stats: insufficient_history) until Kura has enough crawl history; they are then unknown, not zero."),
-			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+				"Sold count, sell-through and days to sell are omitted (sold_stats: insufficient_history) until Kura has enough crawl history; they are then unknown, not zero.",
+			Properties: map[string]any{
 				"brand":      map[string]any{"type": "string"},
 				"model_code": map[string]any{"type": "string"},
 				"group_key":  map[string]any{"type": "string", "description": "Use when the model has no code (from market_overview)"},
-			}, Required: []string{"brand"}},
+			}, Required: []string{"brand"},
 		},
 		{
 			Name:        "get_listing",
-			Description: anthropic.String("Full details of one listing: specs, notes, price history and URL."),
-			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+			Description: "Full details of one listing: specs, notes, price history and URL.",
+			Properties: map[string]any{
 				"id": map[string]any{"type": "string", "description": "Listing id, e.g. brandoff:2101220315016"},
-			}, Required: []string{"id"}},
+			}, Required: []string{"id"},
 		},
 		{
 			Name:        "market_overview",
-			Description: anthropic.String("Overview of the tracked market: listing counts and the most-listed models with median prices. Optionally for one brand."),
-			InputSchema: anthropic.BetaToolInputSchemaParam{Properties: map[string]any{
+			Description: "Overview of the tracked market: listing counts and the most-listed models with median prices. Optionally for one brand.",
+			Properties: map[string]any{
 				"brand": map[string]any{"type": "string"},
-			}},
+			},
 		},
 	}
-	out := make([]anthropic.BetaToolUnionParam, len(defs))
-	for i := range defs {
-		defs[i].EagerInputStreaming = anthropic.Bool(true)
-		out[i] = anthropic.BetaToolUnionParam{OfTool: &defs[i]}
+}
+
+func toolDefs() []anthropic.BetaToolUnionParam {
+	var out []anthropic.BetaToolUnionParam
+	for _, t := range toolSpecs() {
+		out = append(out, anthropic.BetaToolUnionParam{OfTool: &anthropic.BetaToolParam{
+			Name: t.Name, Description: anthropic.String(t.Description),
+			InputSchema:         anthropic.BetaToolInputSchemaParam{Properties: t.Properties, Required: t.Required},
+			EagerInputStreaming: anthropic.Bool(true),
+		}})
 	}
 	return out
 }

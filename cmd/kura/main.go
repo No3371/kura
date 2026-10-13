@@ -34,6 +34,8 @@ const defaultBrands = "HERMES,CHANEL,LOUIS VUITTON,CELINE,LOEWE,GOYARD"
 
 type config struct {
 	db, brands, addr, model string
+	advisor, openaiModel    string
+	openaiEffort            string
 	delay, every            time.Duration
 	maxPages, details       int
 	fxFallback              float64
@@ -60,6 +62,9 @@ func main() {
 		fs.DurationVar(&c.every, "crawl-every", 0, "crawl on this interval while serving (e.g. 6h; 0 = never)")
 		fs.BoolVar(&c.crawlOnStart, "crawl-on-start", false, "crawl once at startup")
 		fs.StringVar(&c.model, "model", envOr("KURA_MODEL", "claude-opus-5-5"), "Claude model for the advisor")
+		fs.StringVar(&c.advisor, "advisor", envOr("KURA_ADVISOR", "auto"), "advisor backend: auto | claude | openai | mock (auto: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set, else mock)")
+		fs.StringVar(&c.openaiModel, "openai-model", envOr("KURA_OPENAI_MODEL", "gpt-5.4"), "OpenAI model for the advisor (OPENAI_BASE_URL targets a compatible endpoint)")
+		fs.StringVar(&c.openaiEffort, "openai-effort", envOr("KURA_OPENAI_EFFORT", ""), "OpenAI reasoning_effort (e.g. medium); empty = not sent, for models without reasoning")
 	}
 	fs.Parse(os.Args[2:])
 
@@ -162,11 +167,9 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 		return err
 	}
 	tools := &advisor.Tools{Radar: eng, FX: d.fx}
-	var adv advisor.Advisor = &advisor.Mock{Tools: tools}
-	if os.Getenv("ANTHROPIC_API_KEY") != "" || os.Getenv("KURA_ADVISOR") == "claude" {
-		adv = advisor.NewClaude(anthropic.NewClient(), c.model, tools, log)
-	} else {
-		log.Warn("ANTHROPIC_API_KEY not set: advisor runs in rule-based mock mode")
+	adv, err := newAdvisor(c, tools, log)
+	if err != nil {
+		return err
 	}
 
 	srv := &web.Server{Store: d.store, Radar: eng, FX: d.fx, Advisor: adv, Log: log,
@@ -201,4 +204,34 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+// newAdvisor picks the advisor backend. auto prefers Claude, then OpenAI,
+// then the rule-based mock, by which API key is set.
+func newAdvisor(c config, tools *advisor.Tools, log *slog.Logger) (advisor.Advisor, error) {
+	mode := c.advisor
+	if mode == "auto" {
+		switch {
+		case os.Getenv("ANTHROPIC_API_KEY") != "":
+			mode = "claude"
+		case os.Getenv("OPENAI_API_KEY") != "":
+			mode = "openai"
+		default:
+			log.Warn("no ANTHROPIC_API_KEY or OPENAI_API_KEY: advisor runs in rule-based mock mode")
+			mode = "mock"
+		}
+	}
+	switch mode {
+	case "claude":
+		return advisor.NewClaude(anthropic.NewClient(), c.model, tools, log), nil
+	case "openai":
+		key := os.Getenv("OPENAI_API_KEY")
+		if key == "" {
+			return nil, errors.New("advisor openai needs OPENAI_API_KEY")
+		}
+		return advisor.NewOpenAI(key, os.Getenv("OPENAI_BASE_URL"), c.openaiModel, c.openaiEffort, tools, log), nil
+	case "mock":
+		return &advisor.Mock{Tools: tools}, nil
+	}
+	return nil, fmt.Errorf("unknown -advisor %q (want auto, claude, openai or mock)", mode)
 }
