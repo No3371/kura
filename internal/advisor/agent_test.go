@@ -23,13 +23,14 @@ import (
 	"github.com/No3371/kura/internal/store"
 )
 
-// fakeAPI replays scripted SSE responses for POST /v1/messages and records
+// fakeAPI replays scripted SSE responses, one per request, and records
 // every request body, so the agent loop can be tested without an API key.
 type fakeAPI struct {
 	mu       sync.Mutex
 	scripts  []string
 	requests []map[string]any
 	headers  []http.Header
+	paths    []string
 }
 
 func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +41,7 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	i := len(f.requests)
 	f.requests = append(f.requests, req)
 	f.headers = append(f.headers, r.Header.Clone())
+	f.paths = append(f.paths, r.URL.Path)
 	f.mu.Unlock()
 	if i >= len(f.scripts) {
 		http.Error(w, `{"type":"error","error":{"type":"invalid_request_error","message":"unexpected call"}}`, 400)

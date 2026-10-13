@@ -218,12 +218,13 @@ holds for ALLU brands with more ALLU公式 bags than its 10-page cap.
   the static system prompt and tools. Conversation history is append-only, and a failed
   turn rolls back so the session stays valid.
 - **OpenAI mode.** With `OPENAI_API_KEY` (or `-advisor openai`) the same prompt, tools and
-  tool runner drive the OpenAI Chat Completions API over plain HTTP (`openai.go`);
+  tool runner drive the OpenAI Responses API over plain HTTP (`openai.go`), with history kept
+  locally (`store: false`, encrypted reasoning replayed);
   `OPENAI_BASE_URL` targets any compatible endpoint.
 - **Mock mode.** With neither key, a rule-based advisor runs the same search
   tool, so the whole demo works offline.
 - **Tested without a key.** `agent_test.go` and `openai_test.go` replay scripted SSE from
-  fake Messages / Chat Completions APIs and assert the request shape and the tool round trip.
+  fake Messages / Responses APIs and assert the request shape and the tool round trip.
 
 ## Running it
 
@@ -249,7 +250,7 @@ export ANTHROPIC_API_KEY=sk-ant-...      # optional; or OPENAI_API_KEY; with nei
 | `-advisor` | `auto` (`KURA_ADVISOR`) | `claude`, `openai` or `mock`; auto picks by which API key is set (Claude first) |
 | `-model` | `claude-opus-5-5` (`KURA_MODEL`) | Claude advisor model |
 | `-openai-model` | `gpt-5.4` (`KURA_OPENAI_MODEL`) | OpenAI advisor model |
-| `-openai-effort` | unset (`KURA_OPENAI_EFFORT`) | `reasoning_effort` for reasoning models; unset = not sent |
+| `-openai-effort` | unset (`KURA_OPENAI_EFFORT`) | `reasoning.effort` for reasoning models; unset = not sent |
 | `-crawl-every` | off | Background crawl interval while serving |
 
 A full sweep of the six default brands is roughly 300 list pages, about 20 minutes at the

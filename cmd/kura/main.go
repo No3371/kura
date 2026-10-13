@@ -68,8 +68,8 @@ func main() {
 		fs.BoolVar(&c.crawlOnStart, "crawl-on-start", false, "crawl once at startup")
 		fs.StringVar(&c.model, "model", envOr("KURA_MODEL", "claude-opus-5-5"), "Claude model for the advisor")
 		fs.StringVar(&c.advisor, "advisor", envOr("KURA_ADVISOR", "auto"), "advisor backend: auto | claude | openai | mock (auto: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set, else mock)")
-		fs.StringVar(&c.openaiModel, "openai-model", envOr("KURA_OPENAI_MODEL", "gpt-5.4"), "OpenAI model for the advisor (OPENAI_BASE_URL targets a compatible endpoint)")
-		fs.StringVar(&c.openaiEffort, "openai-effort", envOr("KURA_OPENAI_EFFORT", ""), "OpenAI reasoning_effort (e.g. medium); empty = not sent, for models without reasoning")
+		fs.StringVar(&c.openaiModel, "openai-model", envOr("KURA_OPENAI_MODEL", "gpt-5.4"), "OpenAI model for the advisor (OPENAI_BASE_URL targets a Responses-compatible endpoint)")
+		fs.StringVar(&c.openaiEffort, "openai-effort", envOr("KURA_OPENAI_EFFORT", ""), "OpenAI reasoning.effort (e.g. medium); empty = not sent, for models without reasoning")
 	}
 	fs.Parse(os.Args[2:])
 
