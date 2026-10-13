@@ -199,8 +199,9 @@ func applyTitle(l *listing.Listing, title string) {
 	l.ModelCode = strings.Join(code, " ")
 }
 
-// ParseDetail parses a product page's spec list (<dl><dt>商品品番</dt><dd>…</dd>…).
-func ParseDetail(r io.Reader) (listing.Detail, error) {
+// ParseDetail parses a product page's spec list (<dl><dt>商品品番</dt><dd>…</dd>…)
+// and its photo gallery; base resolves the page's relative photo paths.
+func ParseDetail(r io.Reader, base *url.URL) (listing.Detail, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return listing.Detail{}, err
@@ -230,7 +231,29 @@ func ParseDetail(r io.Reader) (listing.Detail, error) {
 		Size:        specs["サイズ"],
 		Accessories: acc,
 		Notes:       specs["備考"],
+		Images:      galleryImages(doc, base),
 	}, nil
+}
+
+// galleryImages returns the main slider's photos (#js-main-slider), resolved
+// against base, in page order: the main shot, then sub01, sub02, …. Only
+// .swiper-slide images count. Rejected: matching ProductImages /
+// ProductSubImages paths page-wide — the thumbnail strip and zoom modal repeat
+// every photo. The shop's NowPrinting placeholder (shown until studio shots
+// exist) is left out; rejected: keeping it — the stored gallery would replace
+// the detail page's 店家照片準備中 state with the placeholder image.
+func galleryImages(doc *goquery.Document, base *url.URL) []string {
+	var out []string
+	doc.Find("#js-main-slider .swiper-slide img").Each(func(_ int, img *goquery.Selection) {
+		src := strings.TrimSpace(img.AttrOr("src", ""))
+		if src == "" || strings.Contains(src, "/NowPrinting") {
+			return
+		}
+		if u, err := base.Parse(src); err == nil {
+			out = append(out, u.String())
+		}
+	})
+	return out
 }
 
 func cleanText(s string) string { return strings.Join(strings.Fields(s), " ") }

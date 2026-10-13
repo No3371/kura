@@ -5,10 +5,12 @@
 package allu
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -206,13 +208,37 @@ func modelCode(itemNumber, title string) string {
 
 // apiAsset is the product payload's item.
 type apiAsset struct {
-	ItemNumber     string `json:"item_number"`
-	Color          string `json:"color"`
-	Material       string `json:"material"`
-	Size           string `json:"size"`
-	Accessories    string `json:"accessories"`
-	ListingComment string `json:"listing_comment"`
-	ButtonType     int    `json:"button_type"`
+	ItemNumber     string     `json:"item_number"`
+	Color          string     `json:"color"`
+	Material       string     `json:"material"`
+	Size           string     `json:"size"`
+	Accessories    string     `json:"accessories"`
+	ListingComment string     `json:"listing_comment"`
+	ButtonType     int        `json:"button_type"`
+	Images         []apiImage `json:"app_item_images"`
+}
+
+// apiImage is one product photo of a product payload.
+type apiImage struct {
+	URL   string `json:"url"`
+	Order int    `json:"order"`
+}
+
+// images returns a's photo URLs by the payload's order field, blank ones left
+// out. The sort is stable, so equal or missing orders keep payload order.
+// Rejected: payload order alone — it matches order on both fixtures, but if it
+// ever differs the main photo (order 1) would not lead the gallery, and the
+// stored gallery replaces the list photo on the detail page.
+func (a apiAsset) images() []string {
+	imgs := slices.Clone(a.Images)
+	slices.SortStableFunc(imgs, func(x, y apiImage) int { return cmp.Compare(x.Order, y.Order) })
+	var out []string
+	for _, im := range imgs {
+		if u := strings.TrimSpace(im.URL); u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // soldButton is the product payload's button_type on a sold item. Evidence:
@@ -247,6 +273,7 @@ func ParseDetail(r io.Reader) (d listing.Detail, sold bool, err error) {
 		Size:        cleanText(a.Size),
 		Accessories: cleanText(a.Accessories),
 		Notes:       cleanText(a.ListingComment),
+		Images:      a.images(),
 	}, false, nil
 }
 

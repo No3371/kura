@@ -165,7 +165,7 @@ func TestDetail(t *testing.T) {
 		if gone != c.gone || (err != nil) != c.err {
 			t.Errorf("%s: gone %v err %v; want gone %v, error %v", c.path, gone, err, c.gone, c.err)
 		}
-		if c.path == "/p/bag" && d.ModelCode != "M15242" {
+		if c.path == "/p/bag" && (d.ModelCode != "M15242" || len(d.Images) != 16) {
 			t.Errorf("%s: detail %+v", c.path, d)
 		}
 	}

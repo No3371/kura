@@ -239,16 +239,35 @@ func scanTodos(rows *sql.Rows) ([]DetailTodo, error) {
 }
 
 // SaveDetail stores product-page fields. A model code from the spec table is
-// authoritative and replaces the one parsed from the title.
+// authoritative and replaces the one parsed from the title. Photos the page
+// yielded (d.Images) replace the stored gallery in the same transaction; a
+// page that yielded none keeps it.
+// Rejected: clearing the gallery on empty d.Images — a page whose gallery
+// markup an adapter stops recognising would silently wipe each gallery as
+// re-checks read it. Rejected: the crawler calling SetImages after SaveDetail
+// — a failure between the two leaves detail_at set, PendingDetails never
+// returns the listing again, and its gallery is never collected.
 func (s *Store) SaveDetail(ctx context.Context, id string, d listing.Detail, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE listings SET
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE listings SET
 		color=?, material=?, size=?, accessories=?, notes=?, detail_at=?,
 		model_code = CASE WHEN ?<>'' THEN ? ELSE model_code END,
 		group_key  = CASE WHEN ?<>'' THEN UPPER(?) ELSE group_key END
 		WHERE id=?`,
 		d.Color, d.Material, d.Size, d.Accessories, d.Notes, now.Unix(),
-		d.ModelCode, d.ModelCode, d.ModelCode, d.ModelCode, id)
-	return err
+		d.ModelCode, d.ModelCode, d.ModelCode, d.ModelCode, id); err != nil {
+		return err
+	}
+	if len(d.Images) > 0 {
+		if err := replaceImages(ctx, tx, id, d.Images); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // MarkGone records that listing id is no longer for sale: its product page is
@@ -356,6 +375,15 @@ func (s *Store) SetImages(ctx context.Context, id string, urls []string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := replaceImages(ctx, tx, id, urls); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// replaceImages is SetImages' work inside the caller's transaction (the store
+// has one connection, so it must not touch s.db while tx is open).
+func replaceImages(ctx context.Context, tx *sql.Tx, id string, urls []string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM listing_images WHERE listing_id=?`, id); err != nil {
 		return err
 	}
@@ -372,7 +400,7 @@ func (s *Store) SetImages(ctx context.Context, id string, urls []string) error {
 		}
 		pos++
 	}
-	return tx.Commit()
+	return nil
 }
 
 // Version changes whenever listing data changes or a sweep completes (the

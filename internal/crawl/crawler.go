@@ -173,6 +173,8 @@ func (c *Crawler) SweepTarget(ctx context.Context, src Source, target string) (s
 // product-page data, then, with what is left and when RecheckAfter is set, on
 // re-checks (store.RecheckDue) of listings in recheck — targets whose sweep did
 // not complete in this crawl — that no list page showed since crawlStart.
+// A read's photos replace the listing's gallery (store.SaveDetail), so
+// galleries cost no request beyond the product page itself.
 func (c *Crawler) FetchDetails(ctx context.Context, src Source, recheck []string, crawlStart time.Time) error {
 	if c.DetailBudget <= 0 {
 		return nil
@@ -189,7 +191,7 @@ func (c *Crawler) FetchDetails(ctx context.Context, src Source, recheck []string
 		}
 		todo = append(todo, due...)
 	}
-	var ok, gone, failed int
+	var ok, gone, failed, galleries int
 	for _, t := range todo {
 		d, isGone, err := src.Detail(ctx, t.URL)
 		var saveErr error
@@ -204,6 +206,9 @@ func (c *Crawler) FetchDetails(ctx context.Context, src Source, recheck []string
 			_, saveErr = c.Store.MarkGone(ctx, t.ID, c.now())
 		default:
 			ok++
+			if len(d.Images) > 0 {
+				galleries++
+			}
 			saveErr = c.Store.SaveDetail(ctx, t.ID, d, c.now())
 		}
 		if saveErr != nil {
@@ -211,6 +216,6 @@ func (c *Crawler) FetchDetails(ctx context.Context, src Source, recheck []string
 		}
 	}
 	c.Log.Info("details done", "source", src.Name(), "first", first, "rechecks", len(todo)-first,
-		"fetched", ok, "gone", gone, "failed", failed)
+		"fetched", ok, "galleries", galleries, "gone", gone, "failed", failed)
 	return nil
 }

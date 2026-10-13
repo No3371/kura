@@ -112,5 +112,9 @@ type Detail struct {
 	Size        string
 	Accessories string
 	Notes       string
-	FetchedAt   time.Time
+	// Images is the product page's photo gallery in the shop's order, as
+	// absolute URLs with shop placeholders left out; nil when the page shows
+	// none.
+	Images    []string
+	FetchedAt time.Time
 }

@@ -83,7 +83,11 @@ The fetcher also:
   radar needs. The cap is per source rather than shared so one shop's first-crawl backlog
   can't starve another's details; total fetches per run grow with the number of shops.
   Re-checks of product pages already read (see *Knowing when something sold*) come out of
-  the same cap, after first fetches.
+  the same cap, after first fetches. The same read records the page's photo gallery (URLs
+  only, in the shop's order), so galleries cost no extra request. Listings whose page was
+  read before galleries were collected keep the list photo: Kura reads a page again only
+  for a re-check, which skips listings the crawl's list pages still show and brands whose
+  sweep completed, so most such listings never gain a gallery.
 
 ### Turning messy listings into comparable data
 BRAND OFF titles are Japanese free text with the condition shown only as an icon image.
@@ -236,7 +240,7 @@ export ANTHROPIC_API_KEY=sk-ant-...      # optional; or OPENAI_API_KEY; with nei
 | `-sources` | `brandoff,grare,allu` | Shops to crawl |
 | `-delay` | `3s` | Minimum gap between requests (robots.txt `Crawl-delay` wins if longer) |
 | `-max-pages` | `0` (all) | Cap pages per brand; capped sweeps never count unseen items toward sold |
-| `-details` | `150` | Product pages fetched per source per crawl (colour, size, accessories) |
+| `-details` | `150` | Product pages fetched per source per crawl (colour, size, accessories, photo gallery) |
 | `-recheck-after` | `24h` | Least time between product-page re-checks of one listing, for brands whose sweep didn't complete (0 = off); uses what `-details` leaves |
 | `-advisor` | `auto` (`KURA_ADVISOR`) | `claude`, `openai` or `mock`; auto picks by which API key is set (Claude first) |
 | `-model` | `claude-opus-5-5` (`KURA_MODEL`) | Claude advisor model |
@@ -299,6 +303,6 @@ go test ./...
   (price-drop events, per-model interest) already supports it.
 - **Observability.** The fetcher keeps request/byte/retry/error counters; exposing them and
   sweep durations as Prometheus metrics is a small step.
-- Product images are hotlinked from each shop with its name and a link back; a production
-  deployment would need the shops' permission (their terms reserve reproduction) and would
-  cache thumbnails.
+- Product images (the list photo and each product page's gallery) are hotlinked from each
+  shop with its name and a link back; a production deployment would need the shops'
+  permission (their terms reserve reproduction) and would cache thumbnails.

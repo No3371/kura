@@ -323,6 +323,50 @@ func TestSetImages(t *testing.T) {
 	}
 }
 
+func TestSaveDetailImages(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	l := item("a", 100)
+	if _, err := s.RecordSeen(ctx, "HERMES", l, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	stored := func() Row {
+		t.Helper()
+		rows, err := s.AllRows(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.ID == l.ID() {
+				return r
+			}
+		}
+		t.Fatalf("no row %s", l.ID())
+		return Row{}
+	}
+	save := func(d listing.Detail) {
+		t.Helper()
+		if err := s.SaveDetail(ctx, l.ID(), d, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	save(listing.Detail{Color: "c", Images: []string{"p1", "p2"}})
+	if r := stored(); !slices.Equal(r.Images, []string{"p1", "p2"}) || r.Color != "c" {
+		t.Errorf("first read: images %v color %q", r.Images, r.Color)
+	}
+	// A read that yields no photos keeps the gallery but still saves fields.
+	save(listing.Detail{Color: "d"})
+	if r := stored(); !slices.Equal(r.Images, []string{"p1", "p2"}) || r.Color != "d" {
+		t.Errorf("photo-less re-read: images %v color %q", r.Images, r.Color)
+	}
+	// A read with photos replaces it.
+	save(listing.Detail{Color: "d", Images: []string{"q1"}})
+	if r := stored(); !slices.Equal(r.Images, []string{"q1"}) {
+		t.Errorf("re-read with photos: images %v", r.Images)
+	}
+}
+
 func TestSaveDetailOverridesModelCode(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)

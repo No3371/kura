@@ -118,6 +118,6 @@ func (s *Source) Detail(ctx context.Context, u string) (listing.Detail, bool, er
 	if resp.Status == http.StatusNotFound || strings.Contains(resp.URL.Path, "/Form/Error.aspx") {
 		return listing.Detail{}, true, nil
 	}
-	d, err := ParseDetail(bytes.NewReader(resp.Body))
+	d, err := ParseDetail(bytes.NewReader(resp.Body), resp.URL)
 	return d, false, err
 }
