@@ -32,9 +32,11 @@ type Server struct {
 	FX      *fx.Converter
 	Advisor advisor.Advisor
 	Log     *slog.Logger
-	// Crawl, if set, lets POST /api/crawl start a crawl in the background.
-	Crawl    func(context.Context) error
-	crawling atomic.Bool
+	// Crawl runs one crawl, for the scheduler and, unless NoCrawlAPI is set,
+	// for POST /api/crawl to start in the background.
+	Crawl      func(context.Context) error
+	NoCrawlAPI bool
+	crawling   atomic.Bool
 	BaseCtx  context.Context
 }
 
@@ -175,7 +177,7 @@ func (s *Server) overview(r *http.Request) (any, int, error) {
 	}
 	return map[string]any{
 		"overview": s.Radar.Overview(), "fx": s.FX.Current(), "advisor": s.Advisor.Mode(),
-		"runs": runs, "crawling": s.crawling.Load(), "can_crawl": s.Crawl != nil,
+		"runs": runs, "crawling": s.crawling.Load(), "can_crawl": s.Crawl != nil && !s.NoCrawlAPI,
 		"brands": brands, "categories": cats,
 		// The radar's own thresholds, for the pages that explain them (行情怎麼算,
 		// the detail page's 行情估價 prose): stated from here, never typed into copy.
@@ -255,7 +257,7 @@ func (s *Server) model(r *http.Request) (any, int, error) {
 }
 
 func (s *Server) crawl(r *http.Request) (any, int, error) {
-	if s.Crawl == nil {
+	if s.Crawl == nil || s.NoCrawlAPI {
 		return nil, http.StatusForbidden, httpError{"crawl trigger disabled"}
 	}
 	if !s.crawling.CompareAndSwap(false, true) {

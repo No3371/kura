@@ -43,6 +43,7 @@ type config struct {
 	maxPages, details          int
 	fxFallback                 float64
 	crawlOnStart, verbose      bool
+	noCrawlAPI                 bool
 }
 
 func main() {
@@ -67,6 +68,7 @@ func main() {
 		fs.StringVar(&c.addr, "addr", "127.0.0.1:8080", "listen address")
 		fs.DurationVar(&c.every, "crawl-every", 0, "crawl on this interval while serving (e.g. 6h; 0 = never)")
 		fs.BoolVar(&c.crawlOnStart, "crawl-on-start", false, "crawl once at startup")
+		fs.BoolVar(&c.noCrawlAPI, "no-crawl-api", false, "refuse POST /api/crawl (scheduled crawls still run), for a public deploy")
 		fs.StringVar(&c.model, "model", envOr("KURA_MODEL", "claude-opus-5-5"), "Claude model for the advisor")
 		fs.StringVar(&c.advisor, "advisor", envOr("KURA_ADVISOR", "auto"), "advisor backend: auto | claude | openai | mock (auto: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set, else mock)")
 		fs.StringVar(&c.openaiModel, "openai-model", envOr("KURA_OPENAI_MODEL", "gpt-5.4"), "OpenAI model for the advisor (OPENAI_BASE_URL targets a Responses-compatible endpoint)")
@@ -220,7 +222,7 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 	}
 
 	srv := &web.Server{Store: d.store, Radar: eng, FX: d.fx, Advisor: adv, Log: log,
-		Crawl: d.crawlOnce(log), BaseCtx: ctx}
+		Crawl: d.crawlOnce(log), NoCrawlAPI: c.noCrawlAPI, BaseCtx: ctx}
 	if c.crawlOnStart {
 		go srv.RunCrawl(ctx)
 	}

@@ -20,6 +20,20 @@ import (
 	"github.com/No3371/kura/internal/store"
 )
 
+func TestNoCrawlAPI(t *testing.T) {
+	ran := make(chan struct{}, 1)
+	s := &Server{Crawl: func(context.Context) error { ran <- struct{}{}; return nil }, NoCrawlAPI: true,
+		BaseCtx: context.Background(), Log: slog.New(slog.DiscardHandler)}
+	if _, code, err := s.crawl(httptest.NewRequest(http.MethodPost, "/api/crawl", nil)); code != http.StatusForbidden || err == nil {
+		t.Fatalf("POST /api/crawl with NoCrawlAPI: status %d err %v, want 403", code, err)
+	}
+	select {
+	case <-ran:
+		t.Fatal("crawl ran despite NoCrawlAPI")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestStaticRoutes(t *testing.T) {
 	// Static routes never reach the store, radar or advisor.
 	h := (&Server{}).Handler()
