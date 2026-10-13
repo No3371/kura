@@ -75,6 +75,15 @@ CREATE TABLE IF NOT EXISTS crawl_runs (
     error         TEXT NOT NULL DEFAULT ''
 );
 
+-- 每日一品: Home's featured listing for each Taipei calendar day. The first
+-- request of a day picks it; keeping the pick is what lets a listing that sells
+-- during its day stay up, marked sold, instead of being silently replaced.
+CREATE TABLE IF NOT EXISTS daily_picks (
+    day        TEXT PRIMARY KEY,                       -- YYYY-MM-DD, Asia/Taipei
+    listing_id TEXT NOT NULL REFERENCES listings(id),
+    picked_at  INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fx_rates (
     base       TEXT NOT NULL,
     quote      TEXT NOT NULL,

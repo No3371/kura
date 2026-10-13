@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kura 蔵 · 行情雷達</title>
+<title>Kura 蔵</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236b1f2a'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='serif'>蔵</text></svg>">
-<script>try{var t=new URLSearchParams(location.search).get("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>(function(){var t=null;try{t=new URLSearchParams(location.search).get("theme")}catch(e){}if(t!=="light"&&t!=="dark"){try{t=localStorage.getItem("kura-theme")}catch(e){}}if(t==="light"||t==="dark")document.documentElement.dataset.theme=t})()</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=LXGW+WenKai+TC&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;600&family=Shippori+Mincho:wght@400;600&display=swap">
@@ -64,7 +64,17 @@
     </div>
     <div class="k-footer__bottom">
       <span>價格未含國際運費與進口稅費 · 真偽與商品狀況以賣家說明為準<span id="fx"></span></span>
-      <span>© 2026 Kura</span>
+      <div class="k-footer__end">
+        <div class="k-theme" role="radiogroup" aria-labelledby="k-theme-l">
+          <span id="k-theme-l">外觀</span>
+          <span class="k-theme__seg">
+            <label><input type="radio" name="k-theme" value="system"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11z" fill="currentColor"></path></svg>跟系統</label>
+            <label><input type="radio" name="k-theme" value="light"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"></path></svg>日間</label>
+            <label><input type="radio" name="k-theme" value="dark"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"></path></svg>夜間</label>
+          </span>
+        </div>
+        <span>© 2026 Kura</span>
+      </div>
     </div>
   </div>
 </footer>

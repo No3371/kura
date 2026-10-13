@@ -51,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/models/{brand}/{key}", s.api(s.model))
 	mux.HandleFunc("GET /api/member", s.api(s.member))
 	mux.HandleFunc("GET /api/wanted", s.api(s.wanted))
+	mux.HandleFunc("GET /api/daily", s.api(s.daily))
 	mux.HandleFunc("POST /api/crawl", s.api(s.crawl))
 	mux.HandleFunc("POST /api/chat", s.chat)
 	return mux
