@@ -69,11 +69,14 @@ export function cardHTML(it, { layout = "stack" } = {}) {
     ? `<div class="k-card__drop">${DROP_ICON}<span>已降價，原價</span><s>${twd(it.drop.from_twd)}</s></div>`
     : "";
 
+  const href = `/listing/${encodeURIComponent(it.id)}`;
+  // The photo repeats the model link for pointer users only, as on Home's
+  // hero: one tab stop and one announced link per card.
   return `<article class="k-card${layout === "row" ? " k-card--row" : ""}${sold ? " is-sold" : ""}" data-id="${esc(it.id)}">
-  <div class="k-card__media"><div class="k-card__mat">${mat}</div>${mark}</div>
+  <div class="k-card__media"><a class="k-card__mat" href="${href}" tabindex="-1" aria-hidden="true">${mat}</a>${mark}</div>
   <div class="k-card__body">
     <span class="k-card__brand">${esc(it.brand)}</span>
-    <a class="k-card__model k-link" href="/listing/${encodeURIComponent(it.id)}">${esc(model)}</a>
+    <a class="k-card__model k-link" href="${href}">${esc(model)}</a>
     ${grade}
     <div class="k-card__price">${sold ? `<span class="k-card__lastsold">最後售價</span>` : ""}<span class="k-price">${twd(it.price_twd)}</span>${badgeHTML(v)}</div>
     ${drop}

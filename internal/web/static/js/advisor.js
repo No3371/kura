@@ -299,7 +299,7 @@ function figure(it) {
     ? `<span class="k-adv__grade"><span class="k-grade">${esc(c.label)}</span>${esc(c.desc_zh)}</span>`
     : "";
   return `<figure class="k-adv__rec" aria-label="推薦：${esc(name)}${it.model_code ? " " + esc(it.model_code) : ""}">
-  <div class="k-adv__mat">${mat}</div>
+  <a class="k-adv__mat" href="${href}" tabindex="-1" aria-hidden="true">${mat}</a>
   <div class="k-adv__recmeta">
     <div class="k-adv__recid"><span class="k-adv__brand">${esc(it.brand)}</span><a class="k-adv__name k-link" href="${href}">${esc(name)}</a>${grade}</div>
     <div class="k-adv__recprice"><span class="k-price">${twd(it.price_twd)}</span>${badgeHTML(valuation(it))}</div>

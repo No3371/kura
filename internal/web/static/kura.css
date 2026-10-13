@@ -289,7 +289,7 @@ body { margin: 0; background: var(--k-paper); color: var(--k-ink); font-family: 
 .k-card__media { position: relative; }
 .k-card__mat { aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
   box-shadow: inset 0 0 0 6px var(--k-mat), inset 0 0 0 7px var(--k-mat-line);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); }
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); text-decoration: none; }
 .k-card__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
 .k-card.is-sold .k-card__mat { opacity: .6; }
 /* The mat stays near-white in dark, so its caption keeps a dark ink in both
@@ -601,7 +601,7 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
 .k-adv__rec { margin: 4px 0; display: flex; flex-direction: column; gap: 14px; }
 .k-adv__mat { width: min(240px, 100%); aspect-ratio: 1 / 1; box-sizing: border-box; padding: 10%; background: var(--k-mat); border: 1px solid var(--k-rule);
   box-shadow: inset 0 0 0 6px var(--k-mat), inset 0 0 0 7px var(--k-mat-line);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); }
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--k-mat-ink); text-decoration: none; }
 .k-adv__mat img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
 .k-adv__recmeta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 10px 20px; }
 .k-adv__recid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
@@ -672,9 +672,13 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
   .k-sec h2 { font-size: 24px; }
   .k-sec--first { padding: 24px 0 40px; }
   .k-sec--ruled { padding: 0 0 40px; }
-  .k-row { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
-  .k-row::-webkit-scrollbar { display: none; }
-  .k-row > * { flex: 0 0 200px; min-width: 0; }
+  /* A swipe strip with a thin visible scrollbar: hidden, nothing says the row
+     scrolls, and a mouse (a narrow desktop window) has no way to move it. */
+  .k-row { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px;
+    scrollbar-width: thin; scrollbar-color: var(--k-rule-strong) transparent; }
+  .k-row::-webkit-scrollbar { height: 4px; }
+  .k-row::-webkit-scrollbar-thumb { background: var(--k-rule-strong); border-radius: 2px; }
+  .k-row > * { flex: 0 0 200px; min-width: 0; scroll-snap-align: start; }
   .k-hero { grid-template-columns: minmax(0, 1fr); gap: 32px; padding: 24px 0 48px; }
   .k-hero h1 { font-size: 44px; }
   .k-hero__lede { margin-top: 20px; font-size: 16px; }
