@@ -36,7 +36,7 @@ const defaultBrands = "HERMES,CHANEL,LOUIS VUITTON,CELINE,LOEWE,GOYARD"
 
 type config struct {
 	db, brands, addr, model    string
-	sources                    string
+	sources, userAgent         string
 	advisor, openaiModel       string
 	openaiEffort               string
 	delay, every, recheckAfter time.Duration
@@ -57,6 +57,7 @@ func main() {
 	fs.StringVar(&c.brands, "brands", defaultBrands, "comma-separated brands to crawl")
 	fs.StringVar(&c.sources, "sources", "brandoff,grare,allu", "comma-separated sources to crawl (brandoff, grare, allu)")
 	fs.DurationVar(&c.delay, "delay", 3*time.Second, "minimum delay between requests to the source (robots.txt Crawl-delay wins if longer)")
+	fs.StringVar(&c.userAgent, "user-agent", envOr("KURA_USER_AGENT", crawl.DefaultUserAgent), "User-Agent sent to the sources (robots.txt is still matched as KuraBot)")
 	fs.IntVar(&c.maxPages, "max-pages", 0, "max list pages per brand per sweep (0 = all; capped sweeps never count unseen items toward sold)")
 	fs.IntVar(&c.details, "details", 150, "max product pages to fetch per source per crawl for colour/size/accessories")
 	fs.DurationVar(&c.recheckAfter, "recheck-after", 24*time.Hour, "least time between product-page re-checks of one listing, for brands whose sweep did not complete (0 = never; re-checks use what -details leaves)")
@@ -136,10 +137,15 @@ func setup(ctx context.Context, c config, log *slog.Logger) (*deps, error) {
 		}
 		brands = append(brands, br.Name)
 	}
+	fetcher := func() *crawl.Fetcher {
+		f := crawl.NewFetcher(c.delay)
+		f.UserAgent = c.userAgent
+		return f
+	}
 	available := map[string]crawl.Source{
-		brandoff.SourceName: &brandoff.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
-		grare.SourceName:    &grare.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
-		allu.SourceName:     &allu.Source{Fetcher: crawl.NewFetcher(c.delay), Brands: brands},
+		brandoff.SourceName: &brandoff.Source{Fetcher: fetcher(), Brands: brands},
+		grare.SourceName:    &grare.Source{Fetcher: fetcher(), Brands: brands},
+		allu.SourceName:     &allu.Source{Fetcher: fetcher(), Brands: brands},
 	}
 	var sources []crawl.Source
 	for n := range strings.SplitSeq(c.sources, ",") {
