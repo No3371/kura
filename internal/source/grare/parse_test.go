@@ -1,6 +1,7 @@
 package grare
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"reflect"
@@ -155,7 +156,7 @@ func TestParseDetail(t *testing.T) {
 	defer f.Close()
 	// The saved page is a live listing whose scripts name the out-of-stock
 	// class in their text; that must not read as sold.
-	d, sold, err := ParseDetail(f)
+	d, sold, err := ParseDetail(f, testBase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,10 +171,18 @@ func TestParseDetail(t *testing.T) {
 		Accessories: "保存袋 ・ハンドストラップ",
 		Notes:       "表面/スレ、汚れ / 内側/押し跡 / ストラップ/汚れ / 金具/スレ / におい/素材特有のにおい",
 	}
-	if d != want {
+	var wantImages []string
+	for i := 1; i <= 15; i++ {
+		wantImages = append(wantImages, fmt.Sprintf("https://galleryrare.itembox.cloud/product/593/000000559316/000000559316-%02d.jpg?size=l&w=NjAw&t=20261010201553", i))
+	}
+	if !slices.Equal(d.Images, wantImages) {
+		t.Errorf("Images =\n%v\nwant\n%v", d.Images, wantImages)
+	}
+	d.Images = nil
+	if !reflect.DeepEqual(d, want) {
 		t.Errorf("detail\n got %+v\nwant %+v", d, want)
 	}
-	if _, _, err := ParseDetail(strings.NewReader("<html><body></body></html>")); err == nil {
+	if _, _, err := ParseDetail(strings.NewReader("<html><body></body></html>"), testBase); err == nil {
 		t.Error("a page without the spec table parsed without error")
 	}
 }
@@ -195,7 +204,7 @@ func TestParseDetailSold(t *testing.T) {
 		"sold product page":     strings.Replace(string(b), cart, notice+cart, 1),
 		"notice, no spec table": "<html><body>" + notice + "</body></html>",
 	} {
-		_, sold, err := ParseDetail(strings.NewReader(page))
+		_, sold, err := ParseDetail(strings.NewReader(page), testBase)
 		if err != nil || !sold {
 			t.Errorf("%s: sold %v, err %v; want sold", name, sold, err)
 		}

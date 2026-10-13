@@ -1,8 +1,11 @@
 package brandoff
 
 import (
+	"fmt"
 	"net/url"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/No3371/kura/internal/listing"
@@ -144,7 +147,7 @@ func TestParseDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	d, err := ParseDetail(f)
+	d, err := ParseDetail(f, testBase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,5 +159,25 @@ func TestParseDetail(t *testing.T) {
 	}
 	if d.Material == "" || d.Notes == "" {
 		t.Errorf("missing material/notes: %+v", d)
+	}
+	want := []string{"https://www.brandoff-store.com/Contents/ProductImages/0/2101220315016_LL.jpg"}
+	for i := 1; i <= 8; i++ {
+		want = append(want, fmt.Sprintf("https://www.brandoff-store.com/Contents/ProductSubImages/0/2101220315016_sub%02d_LL.jpg", i))
+	}
+	if !slices.Equal(d.Images, want) {
+		t.Errorf("Images =\n%v\nwant\n%v", d.Images, want)
+	}
+}
+
+func TestParseDetailPlaceholderPhoto(t *testing.T) {
+	page := `<div id="js-main-slider"><div class="swiper-wrapper">` +
+		`<div class="swiper-slide"><img src="/Contents/ProductImages/NowPrinting_LL.jpg"></div>` +
+		`</div></div><div id="tab1-content"><dl><dt>商品品番</dt><dd>X1</dd></dl></div>`
+	d, err := ParseDetail(strings.NewReader(page), testBase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Images != nil || d.ModelCode != "X1" {
+		t.Errorf("detail = %+v; want no images, model code X1", d)
 	}
 }

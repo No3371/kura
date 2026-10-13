@@ -48,10 +48,12 @@ CREATE TABLE IF NOT EXISTS price_points (
     PRIMARY KEY (listing_id, observed_at)
 );
 
--- Product photos beyond listings.image_url (the list-page photo), in the
--- shop's order. Written by whatever collects them (SetImages); the service
--- only reads what is here. AUTOINCREMENT keeps id growing across replacements
--- so Version sees a re-shot gallery with the same photo count.
+-- A listing's product-page photo gallery, in the shop's order; when present
+-- the detail page shows it in place of listings.image_url (the list-page
+-- photo). Written by whatever collects them (SaveDetail on each product-page
+-- read, or SetImages); the service only reads what is here. AUTOINCREMENT
+-- keeps id growing across replacements so Version sees a re-shot gallery
+-- with the same photo count.
 CREATE TABLE IF NOT EXISTS listing_images (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     listing_id  TEXT NOT NULL REFERENCES listings(id),

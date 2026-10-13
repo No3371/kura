@@ -193,8 +193,9 @@ func brandModel(t string) bool {
 // and a 商品お探しサービス button, so a sold item's page stays up rather than
 // answering 404. Rejected: treating only a 404 as gone, which reads such a
 // page as a live listing. The template's own scripts name the class in their
-// text; only an element carrying it counts.
-func ParseDetail(r io.Reader) (d listing.Detail, sold bool, err error) {
+// text; only an element carrying it counts. base resolves the carousel's
+// photo URLs (galleryImages).
+func ParseDetail(r io.Reader, base *url.URL) (d listing.Detail, sold bool, err error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return listing.Detail{}, false, err
@@ -230,7 +231,28 @@ func ParseDetail(r io.Reader) (d listing.Detail, sold bool, err error) {
 		Size:        specs["サイズ"],
 		Accessories: specs["付属品"],
 		Notes:       specs["状態"],
+		Images:      galleryImages(doc, base),
 	}, false, nil
+}
+
+// galleryImages returns the product carousel's photos
+// (figure.fs-c-productCarouselMainImage__image img), resolved against base, in
+// page order. Each slide's img src is the carousel's display size (size=l).
+// Rejected: the figure's data-enlarged-image-url (size=xl) — bigger files for
+// a mat that shows them no larger; data-sub-image-url (size=xs) is a
+// thumbnail, too small as the main photo.
+func galleryImages(doc *goquery.Document, base *url.URL) []string {
+	var out []string
+	doc.Find("figure.fs-c-productCarouselMainImage__image img").Each(func(_ int, img *goquery.Selection) {
+		src := strings.TrimSpace(img.AttrOr("src", ""))
+		if src == "" {
+			return
+		}
+		if u, err := base.Parse(src); err == nil {
+			out = append(out, u.String())
+		}
+	})
+	return out
 }
 
 // cleanText and firstInt repeat brandoff's unexported one-liners; a shared

@@ -25,6 +25,7 @@ type fakeSource struct {
 	sold    map[string][]string // target -> source ids its first page shows sold
 	capped  map[string]bool     // target -> Sweep stops before the last page
 	goneURL map[string]bool     // product pages that say sold
+	images  map[string][]string // product page URL -> its photos
 	details []string
 }
 
@@ -52,7 +53,7 @@ func (f *fakeSource) Detail(ctx context.Context, url string) (listing.Detail, bo
 	if f.goneURL[url] {
 		return listing.Detail{}, true, nil
 	}
-	return listing.Detail{Color: "c"}, false, nil
+	return listing.Detail{Color: "c", Images: f.images[url]}, false, nil
 }
 
 // bags returns n listings of source on one list page each, ids prefixed by target.
@@ -160,6 +161,22 @@ func TestDetailBudgetPerSource(t *testing.T) {
 	}
 	if len(fa.details) != 2 || len(fb.details) != 2 {
 		t.Errorf("detail fetches fa=%d fb=%d, want 2 each", len(fa.details), len(fb.details))
+	}
+}
+
+func TestDetailStoresGallery(t *testing.T) {
+	fa := &fakeSource{name: "fa", targets: []string{"HERMES"},
+		pages:  map[string][][]listing.Listing{"HERMES": bags("fa", "HERMES", 2)},
+		images: map[string][]string{"https://fa/HERMES-0": {"https://img/0a.jpg", "https://img/0b.jpg"}}}
+	c, st := newCrawler(t, 5, fa)
+	if err := c.RunAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := row(t, st, "fa:HERMES-0").Images; !slices.Equal(got, []string{"https://img/0a.jpg", "https://img/0b.jpg"}) {
+		t.Errorf("HERMES-0 gallery = %v", got)
+	}
+	if got := row(t, st, "fa:HERMES-1").Images; got != nil {
+		t.Errorf("HERMES-1 gallery = %v, want none", got)
 	}
 }
 

@@ -263,6 +263,11 @@ func TestParseDetail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const img = "https://image.nanboya.com/ALLU/9480610/ZZ029445"
+	images := []string{img + ".JPG"}
+	for i := 1; i <= 15; i++ {
+		images = append(images, img+"-"+strconv.Itoa(i)+".JPG")
+	}
 	// The fixture's material is null in ALLU's payload.
 	want := listing.Detail{
 		ModelCode:   "M15242",
@@ -270,9 +275,30 @@ func TestParseDetail(t *testing.T) {
 		Size:        "サイズW : 33cm サイズH : 21.5cm サイズD : 18.5cm ショルダー高さ : 56.5cm 持ち手高さ : 11cm",
 		Accessories: "カデナ,クロシェット,ショルダーストラップ,付属バッグ/ポーチ",
 		Notes:       "少々の使用感が見られますが、状態の良いお品物です。内部に保管臭がございます。※中古品の為、記載の無いキズや汚れ等がある場合がございます。予めご了承下さい。",
+		Images:      images,
 	}
 	if sold || !reflect.DeepEqual(d, want) {
 		t.Errorf("detail = %+v sold %v\nwant %+v, not sold", d, sold, want)
+	}
+}
+
+func TestParseDetailImageOrder(t *testing.T) {
+	page := `<script type="application/json" id="__NUXT_DATA__">` + mustJSON(devalue(map[string]any{
+		"data": map[string]any{"market:asset:1": map[string]any{
+			"button_type": 1,
+			"app_item_images": []any{
+				map[string]any{"url": "https://image.nanboya.com/b.JPG", "order": 2},
+				map[string]any{"url": " ", "order": 3},
+				map[string]any{"url": "https://image.nanboya.com/a.JPG", "order": 1},
+			},
+		}},
+	})) + `</script>`
+	d, sold, err := ParseDetail(strings.NewReader(page))
+	if err != nil || sold {
+		t.Fatalf("sold %v err %v", sold, err)
+	}
+	if want := []string{"https://image.nanboya.com/a.JPG", "https://image.nanboya.com/b.JPG"}; !slices.Equal(d.Images, want) {
+		t.Errorf("Images = %v, want %v", d.Images, want)
 	}
 }
 

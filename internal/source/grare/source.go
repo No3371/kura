@@ -94,5 +94,5 @@ func (s *Source) Detail(ctx context.Context, u string) (listing.Detail, bool, er
 	if resp.Status == http.StatusNotFound {
 		return listing.Detail{}, true, nil
 	}
-	return ParseDetail(bytes.NewReader(resp.Body))
+	return ParseDetail(bytes.NewReader(resp.Body), resp.URL)
 }
