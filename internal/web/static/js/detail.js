@@ -110,8 +110,9 @@ function actionsHTML(it, sold) {
 }
 
 // 鑑定卡: the shop's own grade, its definition, and where it sits on the shop's
-// ladder. Each part renders only when the shop supplied it.
-function tagHTML(it, scheme) {
+// ladder. Each part renders only when the shop supplied it. Home's hero hangs
+// the same tag without a scheme, so without the ladder.
+export function tagHTML(it, scheme) {
   const c = it.condition;
   if (!c?.label) return "";
   const grades = scheme?.grades ?? [];

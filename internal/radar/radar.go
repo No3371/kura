@@ -594,6 +594,44 @@ func (e *Engine) sortItems(xs []*Item, by string) {
 	}
 }
 
+// DailyCandidate is today's 每日一品 by rule: among listings in sale, the best
+// condition on Kura's rank bridge, then the lowest price; ties go to the
+// longest listed, then the id, so the same index always gives the same pick.
+// Only listings with a shop photo and a known grade qualify: the pick is shown
+// on its photo with the shop's 鑑定卡. History is dropped, as in Search.
+func (e *Engine) DailyCandidate() (Item, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	var best *Item
+	for _, it := range e.items {
+		if it.Status != "active" || it.PhotoPending || it.Condition.Label == "" || listing.Rank(it.Rank).Score() < 0 {
+			continue
+		}
+		if best == nil || dailyBefore(it, best) {
+			best = it
+		}
+	}
+	if best == nil {
+		return Item{}, false
+	}
+	out := *best
+	out.History = nil
+	return out, true
+}
+
+func dailyBefore(a, b *Item) bool {
+	if sa, sb := listing.Rank(a.Rank).Score(), listing.Rank(b.Rank).Score(); sa != sb {
+		return sa > sb
+	}
+	if a.PriceJPY != b.PriceJPY {
+		return a.PriceJPY < b.PriceJPY
+	}
+	if !a.FirstSeen.Equal(b.FirstSeen) {
+		return a.FirstSeen.Before(b.FirstSeen)
+	}
+	return a.ID < b.ID
+}
+
 // Get returns one item with full history and its group's stats.
 func (e *Engine) Get(id string) (Item, *ModelStats, bool) {
 	e.mu.RLock()

@@ -7,6 +7,7 @@ import { renderMethodology, renderPending } from "./pages.js";
 import { go, keepViewState, markRendered, moved, rememberScroll, setRenderer, viewShown } from "./nav.js";
 import { initAdvisor } from "./advisor.js";
 import { initNotify } from "./notify.js";
+import { initTheme } from "./theme.js";
 
 // [path pattern, view, default document title]. A view is called as
 // view(el, overview, ...pathParams) with the pattern's capture groups still
@@ -15,7 +16,7 @@ import { initNotify } from "./notify.js";
 // the title only if no newer navigation started meanwhile. A view that throws
 // an error with status 404 gets the not-found view.
 const routes = [
-  [/^\/$/, renderHome, "Kura 蔵 · 行情雷達"],
+  [/^\/$/, renderHome, "Kura 蔵"],
   [/^\/browse$/, renderBrowse, "價格最美 · Kura 蔵"],
   [/^\/listing\/([^/]+)$/, renderDetail, "商品頁 · Kura 蔵"],
   [/^\/model\/([^/]+)\/([^/]+)$/, renderModel, "型號頁 · Kura 蔵"],
@@ -145,5 +146,6 @@ overview().then((ov) => {
 
 initAdvisor(overview());
 initNotify();
+initTheme();
 
 render();

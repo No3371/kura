@@ -417,6 +417,27 @@ func (s *Store) Version(ctx context.Context) (string, error) {
 	return fmt.Sprintf("%d/%d/%d/%d/%d/%d", n, last, pts, runs, imgs, imgID), err
 }
 
+// DailyPick returns the listing picked as 每日一品 for day (YYYY-MM-DD).
+func (s *Store) DailyPick(ctx context.Context, day string) (string, bool, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT listing_id FROM daily_picks WHERE day=?`, day).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return id, err == nil, err
+}
+
+// SetDailyPick records id as day's pick unless the day already has one, and
+// returns the day's pick either way: two first requests racing agree on one.
+func (s *Store) SetDailyPick(ctx context.Context, day, id string, at time.Time) (string, error) {
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO daily_picks(day, listing_id, picked_at) VALUES(?,?,?)`,
+		day, id, at.Unix()); err != nil {
+		return "", err
+	}
+	got, _, err := s.DailyPick(ctx, day)
+	return got, err
+}
+
 // Run is one sweep of one crawl target.
 type Run struct {
 	ID                                   int64
