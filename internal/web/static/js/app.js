@@ -28,12 +28,18 @@ const NOT_FOUND_TITLE = "找不到這個頁面 · Kura 蔵";
 
 const main = document.getElementById("main");
 
+// The first load shares one request among the FX line, the advisor and the
+// first view; each later navigation asks again (fresh), since a crawl running
+// while the page is open changes the counts.
 let overviewP;
-function overview() {
-  overviewP ??= api("/api/overview").catch((err) => {
-    overviewP = undefined;
-    throw err;
-  });
+function overview(fresh = false) {
+  if (fresh || !overviewP) {
+    const p = api("/api/overview").catch((err) => {
+      if (overviewP === p) overviewP = undefined;
+      throw err;
+    });
+    overviewP = p;
+  }
   return overviewP;
 }
 
@@ -82,7 +88,7 @@ async function render() {
   const out = document.createElement("div");
   let title = route ? route[2] : NOT_FOUND_TITLE;
   try {
-    const ov = await overview();
+    const ov = await overview(mine > 1);
     if (route) title = (await route[1](out, ov, ...m.slice(1))) || title;
     else renderNotFound(out);
   } catch (err) {
