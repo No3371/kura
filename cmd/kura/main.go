@@ -23,6 +23,7 @@ import (
 	"github.com/No3371/kura/internal/advisor"
 	"github.com/No3371/kura/internal/crawl"
 	"github.com/No3371/kura/internal/fx"
+	"github.com/No3371/kura/internal/judge"
 	"github.com/No3371/kura/internal/listing"
 	"github.com/No3371/kura/internal/radar"
 	"github.com/No3371/kura/internal/source/allu"
@@ -44,6 +45,10 @@ type config struct {
 	fxFallback                 float64
 	crawlOnStart, verbose      bool
 	noCrawlAPI                 bool
+	judge, judgeModel          string
+	judgeBudget                time.Duration
+	chatRate, chatBurst        int
+	trustProxy                 bool
 }
 
 func main() {
@@ -73,6 +78,12 @@ func main() {
 		fs.StringVar(&c.advisor, "advisor", envOr("KURA_ADVISOR", "auto"), "advisor backend: auto | claude | openai | mock (auto: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set, else mock)")
 		fs.StringVar(&c.openaiModel, "openai-model", envOr("KURA_OPENAI_MODEL", "gpt-5.4"), "OpenAI model for the advisor (OPENAI_BASE_URL targets a Responses-compatible endpoint)")
 		fs.StringVar(&c.openaiEffort, "openai-effort", envOr("KURA_OPENAI_EFFORT", ""), "OpenAI reasoning.effort (e.g. medium); empty = not sent, for models without reasoning")
+		fs.StringVar(&c.judge, "judge", envOr("KURA_JUDGE", "auto"), "chat gate (TypeSafe Jev): auto | off | shadow | enforce (auto: shadow if TYPESAFE_API_KEY is set, else off)")
+		fs.StringVar(&c.judgeModel, "judge-model", envOr("KURA_JUDGE_MODEL", "jev-1.14.0"), "Jev model id; pin a versioned id, since thresholds are tuned per model")
+		fs.DurationVar(&c.judgeBudget, "judge-budget", 800*time.Millisecond, "longest wait for the gate's verdict before the turn fails open")
+		fs.IntVar(&c.chatRate, "chat-rate", 6, "chat turns per minute per client IP (0 = no limit)")
+		fs.IntVar(&c.chatBurst, "chat-burst", 3, "chat turns a client may send at once before -chat-rate applies")
+		fs.BoolVar(&c.trustProxy, "trust-proxy", false, "behind one reverse proxy (e.g. Railway): rate-limit on the last X-Forwarded-For hop instead of the peer address")
 	}
 	fs.Parse(os.Args[2:])
 
@@ -220,9 +231,17 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if adv, err = gateAdvisor(adv, c, os.Getenv("TYPESAFE_API_KEY"), log); err != nil {
+		return err
+	}
+	var limiter *web.ChatLimiter
+	if c.chatRate > 0 {
+		limiter = web.NewChatLimiter(c.chatRate, c.chatBurst)
+	}
 
 	srv := &web.Server{Store: d.store, Radar: eng, FX: d.fx, Advisor: adv, Log: log,
-		Crawl: d.crawlOnce(log), NoCrawlAPI: c.noCrawlAPI, BaseCtx: ctx}
+		Crawl: d.crawlOnce(log), NoCrawlAPI: c.noCrawlAPI, BaseCtx: ctx,
+		ChatLimit: limiter, TrustProxy: c.trustProxy}
 	if c.crawlOnStart {
 		go srv.RunCrawl(ctx)
 	}
@@ -283,4 +302,37 @@ func newAdvisor(c config, tools *advisor.Tools, log *slog.Logger) (advisor.Advis
 		return &advisor.Mock{Tools: tools}, nil
 	}
 	return nil, fmt.Errorf("unknown -advisor %q (want auto, claude, openai or mock)", mode)
+}
+
+// gateAdvisor wraps adv in the Jev chat gate per -judge. auto turns the gate
+// on in shadow mode when a key is set, so a deploy never starts enforcing by
+// accident; an explicit shadow or enforce without a key is a startup error,
+// as -advisor openai is without OPENAI_API_KEY.
+func gateAdvisor(adv advisor.Advisor, c config, key string, log *slog.Logger) (advisor.Advisor, error) {
+	mode := c.judge
+	if mode == "auto" {
+		mode = "off"
+		if key != "" {
+			mode = "shadow"
+		}
+	}
+	var gm advisor.GateMode
+	switch mode {
+	case "off":
+		return adv, nil
+	case "shadow":
+		gm = advisor.GateShadow
+	case "enforce":
+		gm = advisor.GateEnforce
+	default:
+		return nil, fmt.Errorf("unknown -judge %q (want auto, off, shadow or enforce)", c.judge)
+	}
+	if key == "" {
+		return nil, fmt.Errorf("-judge %s needs TYPESAFE_API_KEY", mode)
+	}
+	if c.judgeBudget <= 0 {
+		return nil, fmt.Errorf("-judge-budget must be positive, got %v", c.judgeBudget)
+	}
+	log.Info("chat gate", "mode", gm.String(), "model", c.judgeModel, "budget", c.judgeBudget)
+	return advisor.NewGated(adv, judge.New(key, c.judgeModel), gm, c.judgeBudget, log), nil
 }

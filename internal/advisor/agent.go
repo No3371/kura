@@ -84,6 +84,12 @@ func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(
 	checkpoint := len(s.messages)
 	s.messages = append(s.messages, anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(message)))
 	err := c.run(ctx, s, emit)
+	if err == nil {
+		// A cancel does not stop the stream decoding a reply it already
+		// received, so run can finish a cancelled turn. The caller cancelled
+		// it (the chat gate overriding the turn): it fails and rolls back.
+		err = ctx.Err()
+	}
 	if err != nil {
 		s.messages = s.messages[:checkpoint]
 	}

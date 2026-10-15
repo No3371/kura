@@ -48,8 +48,9 @@ flowchart LR
 | `internal/listing` | Source-independent model: condition ranks, categories, brand aliases (EN/中/日) |
 | `internal/store` | SQLite schema and queries (pure-Go driver, no cgo) |
 | `internal/radar` | Fair value, deal score, confidence, drops, per-model stats |
-| `internal/advisor` | Claude and OpenAI agents, tool implementations, offline mock |
-| `internal/web` | API, SSE chat endpoint, embedded vanilla-JS UI |
+| `internal/advisor` | Claude and OpenAI agents, tool implementations, offline mock, chat gate |
+| `internal/judge` | Plain-HTTP client for TypeSafe Jev (typed classification questions) |
+| `internal/web` | API, SSE chat endpoint with per-IP rate limit, embedded vanilla-JS UI |
 
 ## Design decisions worth reading
 
@@ -226,6 +227,83 @@ holds for ALLU brands with more ALLU公式 bags than its 10-page cap.
 - **Tested without a key.** `agent_test.go` and `openai_test.go` replay scripted SSE from
   fake Messages / Responses APIs and assert the request shape and the tool round trip.
 
+### Chat gate
+The advisor is a public, key-backed chat, so every turn passes two guards before it can
+spend advisor tokens.
+
+```mermaid
+flowchart LR
+    U[Shopper] --> L[Per-IP rate limit<br/>+ 1,000-rune cap]
+    L --> G{Gate}
+    G -- message + recent turns --> J[TypeSafe Jev<br/>intent + 5 abuse checks]
+    G -- starts at once --> A[Advisor turn<br/>first event held]
+    J --> P[Policy<br/>pass · short_circuit · block · fail_open]
+    P -- pass / shadow / Jev error --> A2[Release the held turn]
+    P -- enforce: block or off-topic --> X[Cancel the turn<br/>canned reply or refusal]
+```
+
+- **Deterministic guards first.** A content classifier cannot stop a flood of harmless
+  messages, so `POST /api/chat` has a per-client token bucket (`-chat-rate 6` per minute,
+  `-chat-burst 3`) and refuses messages over 1,000 characters before anything else runs.
+  Behind Railway's proxy (`-trust-proxy`) the client is the last `X-Forwarded-For` hop.
+- **One classifier call per turn.** [TypeSafe Jev](https://docs.typesafe.ai) answers
+  typed questions about one state in a single request: an intent Choice (find_bag,
+  price_market, listing_detail, authenticity, logistics, smalltalk, off_topic) and one
+  calibrated yes/no per abuse class (injection, free_llm, counterfeit, harassment, spam).
+  The state describes the service and carries the last three user messages, so a short
+  follow-up like 「第二個呢？」 is read in context. Questions are in English, Jev's
+  strongest language; shopper text stays verbatim. The model id is pinned
+  (`-judge-model jev-1.14.0`), because an alias that moves would silently move the
+  thresholds.
+- **Go code decides, not the classifier.** Any abuse probability ≥ 0.80 blocks the turn
+  with the same line Claude's own refusal shows; 0.50–0.80 is only flagged in the log.
+  `off_topic` at confidence ≥ 0.70 gets a canned reply saying what the advisor does.
+  Everything else passes. Three blocks in a session start a 10-minute cooldown in which
+  turns are refused without calling anything.
+- **Why the lines sit where they do.** A wrongly blocked shopper is the expensive error
+  on a sales-adjacent chat, while a missed attack still meets Claude's own refusal and
+  the rate limit behind it. So blocking needs high precision, and recall is left to the
+  layers behind the gate. Intent acts only on clear off-topic turns: low intent confidence
+  marks the ambiguous turns Jev gets wrong.
+- **Buyer-only scope.** Kura helps people buy. Questions about a bag the user already
+  owns (selling, consigning, valuing, repairing) count as off-topic in the gate, and the
+  advisor's own prompt says the same.
+- **Speculative start.** The advisor turn starts alongside the Jev call and its first
+  event waits for the verdict, so the gate adds max(0, Jev − time to first event)
+  rather than Jev's full latency. A block or short-circuit cancels the turn before its
+  first event is released, and a backend whose turn was cancelled rolls it back, even if
+  it had already received the whole reply, so the turn stays out of the conversation history.
+- **Shadow first, fail open.** `-judge auto` runs the gate in shadow mode whenever
+  `TYPESAFE_API_KEY` is set: every turn is classified and logged, and nothing the shopper
+  sees changes. `-judge enforce` acts on the verdicts. A Jev error, a bad key or a reply
+  slower than `-judge-budget 800ms` lets the turn through (`action=fail_open`); the gate
+  can disable itself, never the chat.
+- **Logs carry labels, not text.** One `advisor gate` line per turn: action, whether it
+  was enforced, intent and its confidence, each abuse probability, the Jev model and
+  latency. Message text is never logged. Blocked turns keep their intent in the log;
+  intent analytics should filter on `action != block`, since abusive turns land in the
+  nearest ordinary intent by design.
+- **Data handling.** With the gate on, each shopper message and up to three earlier ones
+  from its session are sent to TypeSafe for classification. With no key set (or
+  `-judge off`) nothing is sent to TypeSafe.
+
+**Tuning so far.** The state and question wording were chosen on 48 labelled zh-TW
+messages (all intents, 2–3 per abuse class, hard negatives such as 「幫我翻譯這個商品標題」 and
+「這個包是真的嗎」) against `jev-1.14.0`:
+
+| Measure | Result |
+|---|---|
+| Intent | 48 / 48; confidence < 0.70 on 2 turns |
+| Abusive turns blocked at 0.80 | 13 / 13 |
+| Clean turns flagged at 0.50 | 0 / 35 (highest clean score 0.30) |
+| Owned-bag turns → off_topic | 4 / 4 (confidence ≥ 0.96) |
+| Cost · latency (from Taiwan) | ~1,340 input tokens ≈ $0.00006 per turn · p50 ~170–270 ms |
+
+These rows were written by the same author as the questions and are mostly clear-cut. The
+precision target (≥ 0.95 at the block line on zh-TW) still has to be shown on a larger
+gold set with obfuscated injections, Simplified Chinese and real shadow traffic; until
+then the hosted demo will run the gate in shadow mode only.
+
 ## Running it
 
 Requires Go 1.26+.
@@ -235,6 +313,7 @@ go build -o kura ./cmd/kura
 ./kura crawl -brands "HERMES,CHANEL,LOUIS VUITTON" -details 100
 ./kura crawl -sources grare               # one shop only (default: -sources brandoff,grare,allu)
 export ANTHROPIC_API_KEY=sk-ant-...      # optional; or OPENAI_API_KEY; with neither the advisor runs in mock mode
+export TYPESAFE_API_KEY=...              # optional; turns on the chat gate in shadow mode
 ./kura serve -crawl-every 6h             # keeps the radar fresh; price drops and sold items appear from the 2nd crawl on
 ```
 
@@ -252,6 +331,11 @@ export ANTHROPIC_API_KEY=sk-ant-...      # optional; or OPENAI_API_KEY; with nei
 | `-openai-model` | `gpt-5.4` (`KURA_OPENAI_MODEL`) | OpenAI advisor model |
 | `-openai-effort` | unset (`KURA_OPENAI_EFFORT`) | `reasoning.effort` for reasoning models; unset = not sent |
 | `-crawl-every` | off | Background crawl interval while serving |
+| `-judge` | `auto` (`KURA_JUDGE`) | Chat gate: `off`, `shadow` or `enforce`; auto = shadow when `TYPESAFE_API_KEY` is set, else off |
+| `-judge-model` | `jev-1.14.0` (`KURA_JUDGE_MODEL`) | Jev model id (keep it versioned) |
+| `-judge-budget` | `800ms` | Longest wait for the gate's verdict before the turn fails open |
+| `-chat-rate` · `-chat-burst` | `6` · `3` | Chat turns per minute per client IP, and the burst allowance (`-chat-rate 0` = no limit) |
+| `-trust-proxy` | off | Rate-limit on the last `X-Forwarded-For` hop (set behind one reverse proxy, e.g. Railway) |
 
 A full sweep of the six default brands is roughly 300 list pages, about 20 minutes at the
 default delay. ALLU adds at most 10 pages per brand.
@@ -266,7 +350,7 @@ default delay. ALLU adds at most 10 pages per brand.
 | `GET /api/models?brand=` · `GET /api/models/{brand}/{key}` | Per-model statistics |
 | `GET /api/drops` | Recent price cuts |
 | `GET /api/member` | Demo member 林小姐: a watchlist picked from live models and listings, the price cuts and sales the crawl observed on it, and each tracked model's newest listing (see *Newest listings*) |
-| `POST /api/chat` `{session, message}` | Advisor, streamed as Server-Sent Events |
+| `POST /api/chat` `{session, message}` | Advisor, streamed as Server-Sent Events; 429 over the rate limit, 400 over 1,000 characters |
 | `POST /api/crawl` | Start a crawl in the background |
 
 ## Tests
@@ -284,6 +368,11 @@ go test ./...
 - **Radar** covers same-rank and rank-adjusted valuation, dispersion downgrade, drops,
   stats and filters.
 - **Agent** runs the full tool loop against a fake streaming API.
+- **Chat gate** runs against a fake Jev server (no real API calls): the policy table at
+  every threshold edge, shadow vs enforce, fail-open on errors and timeouts, rollback of a
+  cancelled Claude or OpenAI turn (still streaming, or with the whole reply already
+  received), event order and no interleaving under `-race`, and the cooldown.
+  The web tests cover the rate limit, proxy-aware client IPs and the length cap.
 
 ## Limitations and next steps
 
@@ -306,6 +395,10 @@ go test ./...
 - **Marketing automation.** Member segments from advisor conversations, plus Claude-drafted
   LINE/EDM copy for "price dropped on a model you asked about" alerts. The data model
   (price-drop events, per-model interest) already supports it.
+- **Chat gate eval.** A ~150-message zh-TW gold set and a `kura judge-eval` command
+  (intent confusion matrix, per-class precision/recall at each line) are the next step
+  before the hosted demo switches the gate from shadow to enforce. A token-based spend cap
+  for the advisor is separate work.
 - **Observability.** The fetcher keeps request/byte/retry/error counters; exposing them and
   sweep durations as Prometheus metrics is a small step.
 - Product images (the list photo and each product page's gallery) are hotlinked from each

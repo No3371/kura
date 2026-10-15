@@ -6,6 +6,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/No3371/kura/internal/advisor"
 	"github.com/No3371/kura/internal/fx"
@@ -42,7 +44,12 @@ type Server struct {
 	Crawl      func(context.Context) error
 	NoCrawlAPI bool
 	crawling   atomic.Bool
-	BaseCtx  context.Context
+	BaseCtx    context.Context
+	// ChatLimit rate-limits POST /api/chat per client IP; nil = no limit.
+	ChatLimit *ChatLimiter
+	// TrustProxy keys ChatLimit on the last X-Forwarded-For hop, for a
+	// deploy behind one reverse proxy (Railway); off, it keys on RemoteAddr.
+	TrustProxy bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -375,7 +382,7 @@ func (s *Server) overview(r *http.Request) (any, int, error) {
 		cats = append(cats, map[string]string{"key": c.Key, "zh": c.ZH})
 	}
 	return map[string]any{
-		"overview": s.Radar.Overview(), "fx": s.FX.Current(), "advisor": s.Advisor.Mode(),
+		"overview": s.Radar.Overview(), "fx": s.FX.Current(), "advisor": advisor.BaseMode(s.Advisor),
 		"runs": runs, "crawling": s.crawling.Load(), "can_crawl": s.Crawl != nil && !s.NoCrawlAPI,
 		"brands": brands, "categories": cats,
 		// The radar's own thresholds, for the pages that explain them (行情怎麼算,
@@ -482,15 +489,43 @@ func (s *Server) RunCrawl(ctx context.Context) {
 	}
 }
 
+// maxChatRunes caps one chat message. Shoppers' questions fit in a few
+// hundred characters; a pasted dump is cut off here, before it can cost a
+// classifier call or an advisor turn.
+const maxChatRunes = 1000
+
+// chatError writes a JSON error whose text the panel shows to the shopper.
+func chatError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // chat streams advisor events as Server-Sent Events.
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
+	if s.ChatLimit != nil && !s.ChatLimit.Allow(clientIP(r, s.TrustProxy)) {
+		s.Log.Info("chat rate limited")
+		chatError(w, http.StatusTooManyRequests, "目前詢問的人較多，請稍後再試")
+		return
+	}
 	var req struct {
 		Session string `json:"session"`
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil ||
-		strings.TrimSpace(req.Message) == "" || req.Session == "" {
-		http.Error(w, `{"error":"session and message are required"}`, http.StatusBadRequest)
+	tooLong := fmt.Sprintf("訊息太長了，請精簡到 %d 字以內再試一次", maxChatRunes)
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		// A huge paste trips the byte cap before the rune cap; the shopper
+		// gets the same length message rather than the malformed-request one.
+		chatError(w, http.StatusBadRequest, tooLong)
+		return
+	}
+	if err != nil || strings.TrimSpace(req.Message) == "" || req.Session == "" {
+		chatError(w, http.StatusBadRequest, "session and message are required")
+		return
+	}
+	if utf8.RuneCountInString(req.Message) > maxChatRunes {
+		chatError(w, http.StatusBadRequest, tooLong)
 		return
 	}
 	if err := s.Radar.Refresh(r.Context()); err != nil {

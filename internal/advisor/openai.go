@@ -83,6 +83,11 @@ func (o *OpenAI) Chat(ctx context.Context, sessionID, message string, emit func(
 	checkpoint := len(s.messages)
 	s.messages = append(s.messages, oaJSON(map[string]string{"role": "user", "content": message}))
 	err := o.run(ctx, s, emit)
+	if err == nil {
+		// As Claude: a turn finished from an already-received reply after
+		// its context was cancelled still counts as cancelled.
+		err = ctx.Err()
+	}
 	if err != nil {
 		s.messages = s.messages[:checkpoint]
 	}

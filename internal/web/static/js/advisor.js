@@ -178,7 +178,7 @@ async function ask(raw) {
     }
   } catch (err) {
     console.warn(err);
-    errText ||= NET_ERR;
+    errText ||= err.shopper || NET_ERR;
   } finally {
     const pinned = nearBottom();
     // Figures render once, here: building them per text delta would refetch
@@ -200,7 +200,13 @@ async function* events(message) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session, message }),
   });
-  if (!r.ok || !r.body) throw new Error(`chat: HTTP ${r.status}`);
+  if (!r.ok || !r.body) {
+    // Refusals before the stream (rate limit, over-long message) carry a
+    // shopper-facing line in {"error": …}.
+    const err = new Error(`chat: HTTP ${r.status}`);
+    if (r.status === 429 || r.status === 400) err.shopper = (await r.json().catch(() => null))?.error;
+    throw err;
+  }
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = "";

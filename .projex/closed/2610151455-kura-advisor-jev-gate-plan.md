@@ -1,10 +1,13 @@
 # Kura advisor: Jev gate for intent categorization + abuse identification
 
-> **Status:** In Progress
+> **Status:** Complete (Steps 1–4, 6 executed; Steps 5, 7 deferred to follow-ups)
 > **Author:** Claude Opus 5.5 (Agent)
 > **Parent:** User
-> **Related Projex:** 2610140405-jev-embeddinggemma2-matching-proposal.md (Jev background; its U6 "Jev pre-rank" is a different use and stays deferred) | 2610130449-kura-mock-def.md (Canvas gap "Advisor: spend-cap-reached state"; hosted policy "spend cap → demo fallback") | 2610130513-kura-def-nav-vs-design-canvas-redteam.md (#2 advisor runtime + spend cap) | 2610130815-kura-advisor-panel-plan.md (SSE event contract, `shopperErr`)
+> **Related Projex:** 2610140405-jev-embeddinggemma2-matching-proposal.md (Jev background; its U6 "Jev pre-rank" is a different use and stays deferred) | 2610130449-kura-mock-def.md (Canvas gap "Advisor: spend-cap-reached state"; hosted policy "spend cap → demo fallback") | 2610130513-kura-def-nav-vs-design-canvas-redteam.md (#2 advisor runtime + spend cap) | 2610130815-kura-advisor-panel-plan.md (SSE event contract, `shopperErr`) | 2610160323-kura-advisor-jev-gate-audit-fixes-patch.md (post-audit fixes)
 > **Worktree:** Yes (base checkout has unrelated untracked files; other sessions share it)
+> **Log:** 2610151455-kura-advisor-jev-gate-log.md
+> **Completed:** 2026-10-16
+> **Walkthrough:** 2610151455-kura-advisor-jev-gate-walkthrough.md
 
 ---
 
@@ -46,7 +49,7 @@ Every shopper turn gets one Jev request **before or alongside** the advisor mode
 ### Current State
 
 - `advisor.Advisor` interface: `Chat(ctx, sessionID, message, emit) error` + `Mode()`. There are three backends (`Claude`, `OpenAI`, `Mock`), and `cmd/kura/main.go` `newAdvisor` picks one by flag/env key.
-- The Claude and OpenAI backends roll the session back on any error (`checkpoint`), so a cancelled turn leaves no history. The gate relies on this.
+- The Claude and OpenAI backends roll the session back on any error (`checkpoint`), so a cancelled turn leaves no history. The gate relies on this. [PATCHED] Only once a cancelled turn counts as an error even if it finishes from an already-received reply: see 2610160323-kura-advisor-jev-gate-audit-fixes-patch.md.
 - `shopperErr` / `Public` already separate shopper-facing text from log detail. A block uses this path.
 - `sessionStore[M]` is generic, so the gate can reuse it for its own per-session state.
 
