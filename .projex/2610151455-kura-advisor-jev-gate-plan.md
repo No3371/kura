@@ -1,6 +1,6 @@
 # Kura advisor: Jev gate for intent categorization + abuse identification
 
-> **Status:** Ready
+> **Status:** In Progress
 > **Author:** Claude Opus 5.5 (Agent)
 > **Parent:** User
 > **Related Projex:** 2610140405-jev-embeddinggemma2-matching-proposal.md (Jev background; its U6 "Jev pre-rank" is a different use and stays deferred) | 2610130449-kura-mock-def.md (Canvas gap "Advisor: spend-cap-reached state"; hosted policy "spend cap → demo fallback") | 2610130513-kura-def-nav-vs-design-canvas-redteam.md (#2 advisor runtime + spend cap) | 2610130815-kura-advisor-panel-plan.md (SSE event contract, `shopperErr`)
