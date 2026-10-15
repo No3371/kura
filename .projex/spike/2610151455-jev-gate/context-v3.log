@@ -1,0 +1,82 @@
+﻿context-v3 run 2026-10-16T02:30:17
+
+===== run rich2 q3 =====
+calls 48, ok 48
+model: jev-1.14.0
+fields: (top) answers, (top) model, (top) usage, counterfeit.noul, counterfeit.type, free_llm.noul, free_llm.type, harassment.noul, harassment.type, injection.noul, injection.type, intent.choice, intent.confidence, intent.probabilities, intent.type, spam.noul, spam.type
+latency ms: p50 167  p90 179  max 209  min 155
+input tokens: total 63325, mean 1319, cost ≈ $0.00266
+
+intent misses (want → got @confidence):
+intent accuracy 48/48
+  authenticity   map[authenticity:4]
+  find_bag       map[find_bag:7]
+  listing_detail map[listing_detail:5]
+  logistics      map[logistics:3]
+  off_topic      map[off_topic:17]
+  price_market   map[price_market:7]
+  smalltalk      map[smalltalk:5]
+
+abuse noul (pos = labelled class; neg = everything else):
+  counterfeit pos [0.98 0.99 0.99]  min 0.98 | neg max 0.08 (a1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.90
+  free_llm    pos [0.99 0.99 0.97]  min 0.97 | neg max 0.40 (i1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.57
+  harassment  pos [0.99 0.99]  min 0.99 | neg max 0.25 (n3)  | ≥0.9: TP 2/2 FP 0 | ≥0.6 FP 0  gap +0.74
+  injection   pos [0.99 0.99 0.98]  min 0.98 | neg max 0.31 (m1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.67
+  spam        pos [0.98 0.99]  min 0.98 | neg max 0.38 (i3)  | ≥0.9: TP 2/2 FP 0 | ≥0.6 FP 0  gap +0.60
+
+===== run rich3 q3 =====
+calls 48, ok 48
+model: jev-1.14.0
+fields: (top) answers, (top) model, (top) usage, counterfeit.noul, counterfeit.type, free_llm.noul, free_llm.type, harassment.noul, harassment.type, injection.noul, injection.type, intent.choice, intent.confidence, intent.probabilities, intent.type, spam.noul, spam.type
+latency ms: p50 169  p90 187  max 244  min 160
+input tokens: total 64429, mean 1342, cost ≈ $0.00271
+
+intent misses (want → got @confidence):
+intent accuracy 48/48
+  authenticity   map[authenticity:4]
+  find_bag       map[find_bag:7]
+  listing_detail map[listing_detail:5]
+  logistics      map[logistics:3]
+  off_topic      map[off_topic:17]
+  price_market   map[price_market:7]
+  smalltalk      map[smalltalk:5]
+
+abuse noul (pos = labelled class; neg = everything else):
+  counterfeit pos [0.99 0.99 0.99]  min 0.99 | neg max 0.07 (a1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.92
+  free_llm    pos [0.99 0.99 0.97]  min 0.97 | neg max 0.40 (i1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.57
+  harassment  pos [0.99 0.99]  min 0.99 | neg max 0.30 (n3)  | ≥0.9: TP 2/2 FP 0 | ≥0.6 FP 0  gap +0.69
+  injection   pos [1.00 0.99 0.98]  min 0.98 | neg max 0.29 (m1)  | ≥0.9: TP 3/3 FP 0 | ≥0.6 FP 0  gap +0.69
+  spam        pos [0.98 0.99]  min 0.98 | neg max 0.44 (i3)  | ≥0.9: TP 2/2 FP 0 | ≥0.6 FP 0  gap +0.54
+
+===== compare questions: rich2-q2 vs rich2-q3 (original 42 rows) =====
+A = results-rich2-q2.jsonl, B = results-rich2-q3.jsonl, rows in both: 42
+intent accuracy  A 41/42  B 42/42   mean conf A 0.93  B 0.95   mean input tokens A 1266  B 1319
+  intent c2  want off_topic      A authenticity@0.98  B off_topic@1.00
+  intent c3  want off_topic      A off_topic@0.61  B off_topic@0.95
+  intent p4  want price_market   A price_market@0.58  B price_market@0.93
+
+per class            min pos (A → B)   max neg (A → B)        gap (A → B)    mean neg (A → B)
+  counterfeit        0.98 → 0.98       0.08 (a1) → 0.08 (a1)   +0.90 → +0.90    0.024 → 0.024
+  free_llm           0.96 → 0.97       0.38 (i1) → 0.40 (i1)   +0.58 → +0.57    0.036 → 0.038
+  harassment         0.99 → 0.99       0.25 (n3) → 0.25 (n3)   +0.74 → +0.74    0.021 → 0.022
+  injection          0.98 → 0.98       0.36 (m1) → 0.31 (m1)   +0.62 → +0.67    0.043 → 0.039
+  spam               0.98 → 0.98       0.41 (i3) → 0.38 (i3)   +0.57 → +0.60    0.049 → 0.051
+
+abuse shifts ≥ 0.10 (id, label, class: A → B):
+  none
+
+===== compare context: rich2-q3 vs rich3-q3 (all 48 rows) =====
+A = results-rich2-q3.jsonl, B = results-rich3-q3.jsonl, rows in both: 48
+intent accuracy  A 48/48  B 48/48   mean conf A 0.95  B 0.94   mean input tokens A 1319  B 1342
+
+per class            min pos (A → B)   max neg (A → B)        gap (A → B)    mean neg (A → B)
+  counterfeit        0.98 → 0.99       0.08 (a1) → 0.07 (a1)   +0.90 → +0.92    0.025 → 0.025
+  free_llm           0.97 → 0.97       0.40 (i1) → 0.40 (i1)   +0.57 → +0.57    0.035 → 0.033
+  harassment         0.99 → 0.99       0.25 (n3) → 0.30 (n3)   +0.74 → +0.69    0.020 → 0.021
+  injection          0.98 → 0.98       0.31 (m1) → 0.29 (m1)   +0.67 → +0.69    0.036 → 0.038
+  spam               0.98 → 0.98       0.38 (i3) → 0.44 (i3)   +0.60 → +0.54    0.047 → 0.046
+
+abuse shifts ≥ 0.10 (id, label, class: A → B):
+  none
+
+DONE

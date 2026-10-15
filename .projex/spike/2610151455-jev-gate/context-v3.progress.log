@@ -1,0 +1,111 @@
+﻿
+===== run rich2 q3 (exit 0)
+jevspike.exe : f1  200  209ms
+At S:\Repos\portfolio\kura\.projex\spike\2610151455-jev-gate\run-context-v3.ps1:32 char:12
++     $out = & $exe -dir $spike -base $Base @spikeArgs 2> $errFile
++            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (f1  200  209ms:String) [], RemoteException
+ 
+f2  200  161ms
+f3  200  163ms
+f4  200  164ms
+f5  200  169ms
+p1  200  179ms
+p2  200  161ms
+p3  200  188ms
+p4  200  165ms
+l1  200  167ms
+l2  200  170ms
+l3  200  168ms
+l4  200  172ms
+a1  200  169ms
+a2  200  188ms
+a3  200  175ms
+g1  200  164ms
+g2  200  168ms
+g3  200  161ms
+s1  200  168ms
+s2  200  163ms
+s3  200  155ms
+o1  200  159ms
+o2  200  166ms
+o3  200  158ms
+i1  200  165ms
+i2  200  168ms
+i3  200  177ms
+c1  200  182ms
+c2  200  170ms
+c3  200  162ms
+m1  200  167ms
+m2  200  165ms
+m3  200  165ms
+h1  200  162ms
+h2  200  161ms
+x1  200  165ms
+x2  200  167ms
+n1  200  163ms
+n2  200  172ms
+n3  200  169ms
+n4  200  172ms
+w1  200  165ms
+w2  200  169ms
+w3  200  167ms
+w4  200  164ms
+w5  200  163ms
+w6  200  179ms
+===== run rich3 q3 (exit 0)
+jevspike.exe : f1  200  199ms
+At S:\Repos\portfolio\kura\.projex\spike\2610151455-jev-gate\run-context-v3.ps1:32 char:12
++     $out = & $exe -dir $spike -base $Base @spikeArgs 2> $errFile
++            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (f1  200  199ms:String) [], RemoteException
+ 
+f2  200  171ms
+f3  200  229ms
+f4  200  170ms
+f5  200  175ms
+p1  200  161ms
+p2  200  173ms
+p3  200  167ms
+p4  200  162ms
+l1  200  171ms
+l2  200  168ms
+l3  200  166ms
+l4  200  162ms
+a1  200  173ms
+a2  200  169ms
+a3  200  170ms
+g1  200  170ms
+g2  200  166ms
+g3  200  167ms
+s1  200  171ms
+s2  200  180ms
+s3  200  187ms
+o1  200  204ms
+o2  200  244ms
+o3  200  167ms
+i1  200  169ms
+i2  200  170ms
+i3  200  168ms
+c1  200  166ms
+c2  200  162ms
+c3  200  168ms
+m1  200  163ms
+m2  200  167ms
+m3  200  169ms
+h1  200  165ms
+h2  200  160ms
+x1  200  167ms
+x2  200  168ms
+n1  200  176ms
+n2  200  163ms
+n3  200  162ms
+n4  200  172ms
+w1  200  175ms
+w2  200  161ms
+w3  200  170ms
+w4  200  161ms
+w5  200  168ms
+w6  200  169ms
+===== compare questions: rich2-q2 vs rich2-q3 (original 42 rows) (exit 0)
+===== compare context: rich2-q3 vs rich3-q3 (all 48 rows) (exit 0)
