@@ -2,13 +2,18 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
+	"html"
+	"io"
 	"io/fs"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -43,7 +48,7 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	sub, _ := fs.Sub(static, "static")
-	mux.Handle("GET /", spaFallback(sub))
+	mux.Handle("GET /", spaFallback(sub, s.pageMeta))
 
 	mux.HandleFunc("GET /api/overview", s.api(s.overview))
 	mux.HandleFunc("GET /api/listings", s.api(s.listings))
@@ -76,12 +81,17 @@ func init() {
 // (191502BZJ.04LU), and a route keyed by one would render through in-app
 // navigation yet 404 on reload. Directories are served only when they hold an
 // index.html; any other directory would answer with a file listing.
-func spaFallback(root fs.FS) http.Handler {
+// meta gives a client route's own link-preview tags (see serveIndex).
+func spaFallback(root fs.FS, meta func(*http.Request) *pageMeta) http.Handler {
 	files := http.FileServerFS(root)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" {
 			name = "."
+		}
+		if name == "." {
+			serveIndex(w, r, root, nil)
+			return
 		}
 		if fi, err := fs.Stat(root, name); err == nil {
 			if fi.IsDir() && !exists(root, path.Join(name, "index.html")) {
@@ -96,8 +106,197 @@ func spaFallback(root fs.FS) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		http.ServeFileFS(w, r, root, "index.html")
+		serveIndex(w, r, root, meta(r))
 	})
+}
+
+// serveIndex writes index.html with __ORIGIN__ and __URL__ filled in from the
+// request, since og:image and og:url must be absolute and the public host is
+// only known per deploy. Railway's proxy terminates TLS and reports the
+// scheme in X-Forwarded-Proto. A non-nil m replaces the site-wide preview tags
+// with one listing's or model's, as link crawlers never run the SPA.
+func serveIndex(w http.ResponseWriter, r *http.Request, root fs.FS, m *pageMeta) {
+	b, err := fs.ReadFile(root, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if p := r.Header.Get("X-Forwarded-Proto"); p == "https" || p == "http" {
+		scheme = p
+	}
+	origin := scheme + "://" + r.Host
+	page := strings.NewReplacer(
+		"__ORIGIN__", html.EscapeString(origin),
+		"__URL__", html.EscapeString(origin+r.URL.EscapedPath()),
+	).Replace(string(b))
+	if m != nil {
+		page = m.apply(page)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	io.WriteString(w, page)
+}
+
+// pageMeta is a shared /listing or /model link's own preview.
+type pageMeta struct {
+	docTitle string // <title>, as the SPA sets it once rendered
+	title    string // og:title
+	desc     string
+	// image is the shop's photo URL, hotlinked as the UI's <img> tags do; ""
+	// keeps the site card (og.png) for items whose photo is still pending.
+	image, imageAlt string
+}
+
+// apply rewrites index.html's site-wide tags. A shop photo is a small square
+// of unknown size, so og.png's 1200x630 dimensions go and the Twitter card
+// drops to the thumbnail layout.
+func (m *pageMeta) apply(page string) string {
+	e := html.EscapeString
+	page = strings.Replace(page, "<title>Kura 蔵</title>", "<title>"+e(m.docTitle)+"</title>", 1)
+	page = setMeta(page, `property="og:title"`, e(m.title))
+	page = setMeta(page, `property="og:description"`, e(m.desc))
+	if m.image != "" {
+		page = setMeta(page, `property="og:image"`, e(m.image))
+		page = setMeta(page, `property="og:image:alt"`, e(m.imageAlt))
+		page = dropMeta(page, `property="og:image:width"`)
+		page = dropMeta(page, `property="og:image:height"`)
+		page = setMeta(page, `name="twitter:card"`, "summary")
+	}
+	return page
+}
+
+// metaTag finds the <meta> tag carrying attr, returning the bounds of the tag
+// and of its content value.
+func metaTag(page, attr string) (start, vStart, vEnd, end int, ok bool) {
+	i := strings.Index(page, "<meta "+attr+` content="`)
+	if i < 0 {
+		return 0, 0, 0, 0, false
+	}
+	vStart = i + len("<meta "+attr+` content="`)
+	n := strings.IndexByte(page[vStart:], '"')
+	if n < 0 {
+		return 0, 0, 0, 0, false
+	}
+	vEnd = vStart + n
+	n = strings.IndexByte(page[vEnd:], '>')
+	if n < 0 {
+		return 0, 0, 0, 0, false
+	}
+	return i, vStart, vEnd, vEnd + n + 1, true
+}
+
+func setMeta(page, attr, value string) string {
+	if _, vs, ve, _, ok := metaTag(page, attr); ok {
+		return page[:vs] + value + page[ve:]
+	}
+	return page
+}
+
+func dropMeta(page, attr string) string {
+	if s, _, _, e, ok := metaTag(page, attr); ok {
+		return page[:s] + strings.TrimPrefix(page[e:], "\n")
+	}
+	return page
+}
+
+// pageMeta looks up the listing or model a client route names, with the
+// SPA's own patterns (/listing/{id}, /model/{brand}/{key}, each segment
+// URI-encoded). nil, for the site-wide tags, when the route is another one,
+// the item is unknown, or the server runs without data (static-route tests).
+func (s *Server) pageMeta(r *http.Request) *pageMeta {
+	if s.Radar == nil || s.Radar.Store == nil {
+		return nil
+	}
+	seg := strings.Split(strings.TrimPrefix(r.URL.EscapedPath(), "/"), "/")
+	if !(len(seg) == 2 && seg[0] == "listing") && !(len(seg) == 3 && seg[0] == "model") {
+		return nil
+	}
+	for i, p := range seg {
+		v, err := url.PathUnescape(p)
+		if err != nil || v == "" {
+			return nil
+		}
+		seg[i] = v
+	}
+	if err := s.Radar.Refresh(r.Context()); err != nil {
+		s.Log.Error("radar refresh", "err", err)
+	}
+	if seg[0] == "listing" {
+		return s.listingMeta(seg[1])
+	}
+	return s.modelMeta(seg[1], seg[2])
+}
+
+func (s *Server) listingMeta(id string) *pageMeta {
+	it, _, ok := s.Radar.Get(id)
+	if !ok {
+		return nil
+	}
+	name := cmp.Or(it.ModelName, it.Title)
+	shop := cmp.Or(it.SourceName, it.Source)
+	var desc []string
+	if it.Status == "active" {
+		desc = append(desc, twd(it.PriceTWD))
+	} else {
+		desc = append(desc, "已找到新主人", "最後售價 "+twd(it.PriceTWD))
+	}
+	if it.Condition.Label != "" {
+		desc = append(desc, shop+" "+it.Condition.Label)
+	} else {
+		desc = append(desc, shop)
+	}
+	m := &pageMeta{
+		docTitle: name + " · " + it.Brand + " · Kura 蔵",
+		title:    it.Brand + " " + name,
+		desc:     strings.Join(desc, " · "),
+		imageAlt: name + " 商品照片",
+	}
+	// The detail page's first photo: the stored gallery's, else the list photo.
+	if len(it.Images) > 0 {
+		m.image = it.Images[0]
+	} else if !it.PhotoPending {
+		m.image = it.ImageURL
+	}
+	return m
+}
+
+func (s *Server) modelMeta(brand, key string) *pageMeta {
+	st, items, ok := s.Radar.Model(canonicalBrand(brand), key)
+	if !ok {
+		return nil
+	}
+	name := cmp.Or(st.ModelName, st.ModelCode, key)
+	m := &pageMeta{
+		docTitle: name + " 型號 · " + st.Brand + " · Kura 蔵",
+		title:    st.Brand + " " + name,
+		imageAlt: name + " 型號照片",
+	}
+	// items lists active ones first, cheapest first; the photo is the first
+	// real one, as on the model page (the stats' may be a placeholder).
+	if len(items) > 0 && items[0].Status == "active" {
+		m.desc = fmt.Sprintf("在售 %d 件，%s 起", st.Active, twd(items[0].PriceTWD))
+	} else {
+		m.desc = fmt.Sprintf("目前沒有在售 · 已售出 %d 件", st.Sold)
+	}
+	for _, it := range items {
+		if !it.PhotoPending && it.ImageURL != "" {
+			m.image = it.ImageURL
+			break
+		}
+	}
+	return m
+}
+
+// twd formats like the UI's twd(): NT$ and comma-grouped dollars.
+func twd(n int64) string {
+	s := strconv.FormatInt(max(n, 0), 10)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return "NT$" + s
 }
 
 var assetExt = map[string]bool{

@@ -54,6 +54,11 @@ func TestStaticRoutes(t *testing.T) {
 		{"/about", "text/html", `id="main"`, 200},
 		{"/", "text/html", "k-member", 200},
 		{"/kura.css", "text/css", "--k-paper", 200},
+		{"/favicon.ico", "image/", "", 200},
+		{"/apple-touch-icon.png", "image/png", "", 200},
+		{"/og.png", "image/png", "", 200},
+		{"/", "text/html", `content="http://example.com/og.png"`, 200},
+		{"/browse", "text/html", `content="http://example.com/browse"`, 200},
 		{"/legacy/", "text/html", "AI 找包顧問", 200},
 		{"/model/191502BZJ.04LU", "text/html", `id="main"`, 200},
 		{"/model/CHANEL/name%3A%E3%83%9E%E3%83%88%E3%83%A9%E3%83%83%E3%82%BB", "text/html", `id="main"`, 200},
@@ -79,6 +84,120 @@ func TestStaticRoutes(t *testing.T) {
 		}
 		if !strings.Contains(rec.Body.String(), c.body) {
 			t.Errorf("%s: body lacks %q", c.path, c.body)
+		}
+	}
+}
+
+func TestIndexOriginBehindProxy(t *testing.T) {
+	h := (&Server{}).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/listing/brandoff:1", nil)
+	req.Host = "kura.up.railway.app"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	for _, want := range []string{
+		`content="https://kura.up.railway.app/og.png"`,
+		`content="https://kura.up.railway.app/listing/brandoff:1"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "__ORIGIN__") || strings.Contains(body, "__URL__") {
+		t.Error("placeholder left in index.html")
+	}
+}
+
+// Shared /listing and /model links unfurl with the item's own tags; anything
+// else, unknown ids included, keeps the site card.
+func TestIndexItemPreview(t *testing.T) {
+	listing.RegisterScheme(listing.Scheme{Source: "wg", Name: "テスト", Shop: "テスト店", Graded: "店家鑑定",
+		Grades: []listing.Grade{{Code: "A", Label: "ランクA", Short: "A", Rank: listing.RankA}}})
+	st, err := store.Open(filepath.Join(t.TempDir(), "kura.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	seen := func(l listing.Listing) {
+		t.Helper()
+		if _, err := st.RecordSeen(context.Background(), "HERMES", l, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	photo := listing.Listing{Source: "wg", SourceID: "1", URL: "u", ImageURL: "https://shop.example/p/1.jpg?a=1&b=2",
+		Brand: "HERMES", Title: "t", ModelName: `Birkin <30> & "Co"`, ModelCode: "OG1",
+		Grade: "A", Rank: listing.RankA, PriceJPY: 1000000}
+	seen(photo)
+	pending := photo
+	pending.SourceID, pending.ImageURL, pending.PriceJPY = "2", "https://shop.example/NowPrinting.jpg", 500000
+	seen(pending) // same model, cheaper, no photo yet
+	fxc := &fx.Converter{Fallback: 0.2}
+	h := (&Server{Store: st, Radar: &radar.Engine{Store: st, FX: fxc}, FX: fxc,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
+	get := func(path string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "kura.up.railway.app"
+		req.Header.Set("X-Forwarded-Proto", "https")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: code %d", path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	const name = `Birkin &lt;30&gt; &amp; &#34;Co&#34;`
+	generic := []string{
+		`<meta property="og:title" content="Kura 蔵 · 日本二手精品包價格雷達">`,
+		`<meta property="og:image" content="https://kura.up.railway.app/og.png">`,
+		`<meta property="og:image:width" content="1200">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+	}
+	cases := []struct {
+		path      string
+		want, not []string
+	}{
+		{"/listing/wg:1", []string{
+			`<title>` + name + ` · HERMES · Kura 蔵</title>`,
+			`<meta property="og:title" content="HERMES ` + name + `">`,
+			`<meta property="og:description" content="NT$200,000 · テスト店 ランクA">`,
+			`<meta property="og:image" content="https://shop.example/p/1.jpg?a=1&amp;b=2">`,
+			`<meta property="og:image:alt" content="` + name + ` 商品照片">`,
+			`<meta name="twitter:card" content="summary">`,
+			`<meta property="og:url" content="https://kura.up.railway.app/listing/wg:1">`,
+		}, []string{`og:image:width`, `og:image:height`, `/og.png`}},
+		// Photo pending: the item's words, the site card's picture.
+		{"/listing/wg%3A2", []string{
+			`<meta property="og:title" content="HERMES ` + name + `">`,
+			`<meta property="og:description" content="NT$100,000 · テスト店 ランクA">`,
+			generic[1], generic[2], generic[3],
+		}, nil},
+		// Cheapest first, but the photo is the first real one.
+		{"/model/HERMES/OG1", []string{
+			`<title>` + name + ` 型號 · HERMES · Kura 蔵</title>`,
+			`<meta property="og:title" content="HERMES ` + name + `">`,
+			`<meta property="og:description" content="在售 2 件，NT$100,000 起">`,
+			`<meta property="og:image" content="https://shop.example/p/1.jpg?a=1&amp;b=2">`,
+		}, []string{`og:image:width`}},
+		{"/model/hermes/OG1", []string{`<meta property="og:title" content="HERMES ` + name + `">`}, nil},
+		{"/listing/wg:nope", generic, nil},
+		{"/model/HERMES/NOPE", generic, nil},
+		{"/listing/wg:1/extra", generic, nil},
+		{"/browse", generic, nil},
+		{"/", generic, nil},
+	}
+	for _, c := range cases {
+		body := get(c.path)
+		for _, w := range c.want {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s: body lacks %s", c.path, w)
+			}
+		}
+		for _, n := range c.not {
+			if strings.Contains(body, n) {
+				t.Errorf("%s: body still has %s", c.path, n)
+			}
 		}
 	}
 }
