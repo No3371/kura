@@ -87,6 +87,28 @@ func listPage(count string, n int) string {
 	return b.String()
 }
 
+func TestParseListDropsForeignLinks(t *testing.T) {
+	page := listPage("3件中", 1)
+	for _, href := range []string{
+		"javascript://x/%0Aalert(1)/11500001", // passes the product id check
+		"https://evil.example/c/fashion/x/11500002",
+	} {
+		page = strings.Replace(page, "</div></body>", `<article class="fs-c-productListItem"><span class="fs-c-productName"><a href="`+
+			href+`"><span class="fs-c-productName__name">ルイヴィトン スピーディ</span></a></span>`+
+			`<span class="fs-c-productPrice--selling"><span class="fs-c-price__value">100,000</span></span></article></div></body>`, 1)
+	}
+	p, err := ParseList(strings.NewReader(page), testBase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Cards) != 1 || p.Cards[0].SourceID != "11500000" {
+		t.Fatalf("cards = %+v, want only the on-site one", p.Cards)
+	}
+	if p.Complete() {
+		t.Error("a page with dropped cards reads as complete")
+	}
+}
+
 func TestParseListCount(t *testing.T) {
 	for _, c := range []struct {
 		name, count string

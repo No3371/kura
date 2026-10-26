@@ -67,6 +67,13 @@ func ParseList(r io.Reader, base *url.URL) (ListPage, error) {
 		if err != nil {
 			return
 		}
+		// The URL becomes the card's link on Kura's own pages, so only the
+		// shop's own pages pass: a javascript: URL, or one on another host,
+		// is dropped. A dropped card leaves the page short of its count, so
+		// the sweep reads as incomplete and marks nothing gone.
+		if u.Scheme != base.Scheme || u.Host != base.Host {
+			return
+		}
 		u.RawQuery, u.Fragment = "", ""
 		// Product ids are the last path segment: mostly the shop's numeric
 		// 商品番号, sometimes a lower-case model code (".../m46203"). Category
