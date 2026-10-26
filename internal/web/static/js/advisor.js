@@ -201,10 +201,10 @@ async function* events(message) {
     body: JSON.stringify({ session, message }),
   });
   if (!r.ok || !r.body) {
-    // Refusals before the stream (rate limit, over-long message) carry a
+    // Refusals before the stream (rate limit, over-long message, ban) carry a
     // shopper-facing line in {"error": …}.
     const err = new Error(`chat: HTTP ${r.status}`);
-    if (r.status === 429 || r.status === 400) err.shopper = (await r.json().catch(() => null))?.error;
+    if (r.status === 429 || r.status === 400 || r.status === 403) err.shopper = (await r.json().catch(() => null))?.error;
     throw err;
   }
   const reader = r.body.getReader();

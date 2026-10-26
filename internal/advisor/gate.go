@@ -364,6 +364,27 @@ func (h *heldEmit) decide(drop bool) {
 
 var errCooldown = errors.New("gate: session in cooldown")
 
+type blockHookKey struct{}
+
+// WithBlockHook returns a ctx whose Gated.Chat calls fn for each turn it
+// blocks in enforce mode, so a caller that knows the client (the web layer,
+// by IP) can act on repeat offenders. fn returns how long the client is now
+// banned for, or 0 if this block did not start a ban; the shopper then sees
+// BannedText instead of the ordinary block line. Cooldown refusals do not
+// call it: those turns never reach Jev.
+func WithBlockHook(ctx context.Context, fn func() time.Duration) context.Context {
+	return context.WithValue(ctx, blockHookKey{}, fn)
+}
+
+// BannedText tells a banned shopper that the advisor is closed to them and
+// for about how long.
+func BannedText(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("此連線因多次違規使用，已暫停使用顧問，約 %d 分鐘後可再試", max(1, int((d+time.Minute-1)/time.Minute)))
+	}
+	return fmt.Sprintf("此連線因多次違規使用，已暫停使用顧問，約 %d 小時後可再試", int((d+time.Hour-1)/time.Hour))
+}
+
 func (g *Gated) Chat(ctx context.Context, sessionID, message string, emit func(Event)) error {
 	start := g.clock()
 	s := g.sessions.get(sessionID)
@@ -407,6 +428,11 @@ func (g *Gated) Chat(ctx context.Context, sessionID, message string, emit func(E
 		<-innerDone
 		if v.Action == ActionBlock {
 			err = shopperErr(gateBlockText, fmt.Errorf("gate: %s %.2f", v.BlockedBy, v.Abuse[v.BlockedBy]))
+			if fn, ok := ctx.Value(blockHookKey{}).(func() time.Duration); ok {
+				if d := fn(); d > 0 {
+					err = shopperErr(BannedText(d), err)
+				}
+			}
 		} else {
 			emit(Event{Type: "text", Text: gateOffTopicText})
 		}

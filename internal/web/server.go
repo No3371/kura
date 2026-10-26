@@ -47,8 +47,11 @@ type Server struct {
 	BaseCtx    context.Context
 	// ChatLimit rate-limits POST /api/chat per client IP; nil = no limit.
 	ChatLimit *ChatLimiter
-	// TrustProxy keys ChatLimit on the last X-Forwarded-For hop, for a
-	// deploy behind one reverse proxy (Railway); off, it keys on RemoteAddr.
+	// Bans refuses POST /api/chat from an IP whose turns the gate keeps
+	// blocking; nil = no bans. Only blocks the gate enforces count.
+	Bans *Banlist
+	// TrustProxy keys ChatLimit and Bans on the last X-Forwarded-For hop, for
+	// a deploy behind one reverse proxy (Railway); off, it keys on RemoteAddr.
 	TrustProxy bool
 }
 
@@ -503,7 +506,16 @@ func chatError(w http.ResponseWriter, code int, msg string) {
 
 // chat streams advisor events as Server-Sent Events.
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
-	if s.ChatLimit != nil && !s.ChatLimit.Allow(clientIP(r, s.TrustProxy)) {
+	ip := clientIP(r, s.TrustProxy)
+	if s.Bans != nil {
+		if left, banned := s.Bans.Banned(ip); banned {
+			s.Log.Info("chat banned")
+			w.Header().Set("Retry-After", strconv.Itoa(int(left.Seconds())+1))
+			chatError(w, http.StatusForbidden, advisor.BannedText(left))
+			return
+		}
+	}
+	if s.ChatLimit != nil && !s.ChatLimit.Allow(ip) {
 		s.Log.Info("chat rate limited")
 		chatError(w, http.StatusTooManyRequests, "目前詢問的人較多，請稍後再試")
 		return
@@ -549,6 +561,15 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
+	if s.Bans != nil {
+		ctx = advisor.WithBlockHook(ctx, func() time.Duration {
+			if !s.Bans.Strike(ip) {
+				return 0
+			}
+			s.Log.Warn("chat ban", "ip", ip, "for", s.Bans.ban)
+			return s.Bans.ban
+		})
+	}
 	start := time.Now()
 	if err := s.Advisor.Chat(ctx, req.Session, req.Message, emit); err != nil {
 		s.Log.Warn("advisor", "err", err)

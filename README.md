@@ -259,7 +259,10 @@ flowchart LR
   with the same line Claude's own refusal shows; 0.50–0.80 is only flagged in the log.
   `off_topic` at confidence ≥ 0.70 gets a canned reply saying what the advisor does.
   Everything else passes. Three blocks in a session start a 10-minute cooldown in which
-  turns are refused without calling anything.
+  turns are refused without calling anything. A visitor resets that by opening a new
+  session, so blocks are also counted per client IP: five in an hour (`-ban-after 5`)
+  ban the address from chat for 12 hours (`-ban-for 12h`), and the shopper is told so. The ban lives in memory, so a
+  restart lifts it, and it only counts blocks the gate enforces.
 - **Why the lines sit where they do.** A wrongly blocked shopper is the expensive error
   on a sales-adjacent chat, while a missed attack still meets Claude's own refusal and
   the rate limit behind it. So blocking needs high precision, and recall is left to the
@@ -335,7 +338,8 @@ export TYPESAFE_API_KEY=...              # optional; turns on the chat gate in s
 | `-judge-model` | `jev-1.14.0` (`KURA_JUDGE_MODEL`) | Jev model id (keep it versioned) |
 | `-judge-budget` | `800ms` | Longest wait for the gate's verdict before the turn fails open |
 | `-chat-rate` · `-chat-burst` | `6` · `3` | Chat turns per minute per client IP, and the burst allowance (`-chat-rate 0` = no limit) |
-| `-trust-proxy` | off | Rate-limit on the last `X-Forwarded-For` hop (set behind one reverse proxy, e.g. Railway) |
+| `-ban-after` · `-ban-for` | `5` · `12h` | Gate-blocked turns from one client IP within an hour before it is refused chat for the ban duration (`-ban-after 0` = no bans; has no effect unless `-judge enforce`) |
+| `-trust-proxy` | off | Rate-limit and ban on the last `X-Forwarded-For` hop (set behind one reverse proxy, e.g. Railway) |
 
 A full sweep of the six default brands is roughly 300 list pages, about 20 minutes at the
 default delay. ALLU adds at most 10 pages per brand.

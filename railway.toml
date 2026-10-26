@@ -1,9 +1,10 @@
 # Railway deploy: Railpack builds ./cmd/kura into ./out. The SQLite db lives on
 # the volume mounted at /data; KURA_USER_AGENT and the advisor keys are set as
-# service variables (TYPESAFE_API_KEY turns on the chat gate in shadow mode).
-# -trust-proxy: Railway's edge proxy is the peer, so the chat rate limit keys on
-# the last X-Forwarded-For hop.
+# service variables. -judge enforce runs the chat gate for real (and starts the
+# per-IP ban); it needs TYPESAFE_API_KEY, or the server refuses to start.
+# -trust-proxy: Railway's edge proxy is the peer, so the chat rate limit and the
+# ban key on the last X-Forwarded-For hop.
 [deploy]
-startCommand = "./out serve -addr 0.0.0.0:8080 -db /data/kura.db -crawl-on-start -crawl-every 24h -no-crawl-api -trust-proxy"
+startCommand = "./out serve -addr 0.0.0.0:8080 -db /data/kura.db -crawl-on-start -crawl-every 24h -no-crawl-api -judge enforce -trust-proxy"
 healthcheckPath = "/"
 restartPolicyType = "ON_FAILURE"

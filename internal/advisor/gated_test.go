@@ -337,6 +337,51 @@ func TestGatedConcurrentSessions(t *testing.T) {
 	wg.Wait()
 }
 
+func TestGatedBlockHook(t *testing.T) {
+	abusive := jevSays("find_bag", 0.9, map[string]float64{"injection": 0.99})
+	for _, tc := range []struct {
+		name    string
+		mode    GateMode
+		respond func(map[string]any) (int, string)
+		want    int32
+	}{
+		{"enforce block", GateEnforce, abusive, 1},
+		{"shadow block", GateShadow, abusive, 0},
+		{"enforce pass", GateEnforce, jevSays("find_bag", 0.9, nil), 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g, _ := newGate(t, &scriptAdvisor{events: innerEvents}, &fakeJev{respond: tc.respond}, tc.mode)
+			var hits atomic.Int32
+			ctx := WithBlockHook(context.Background(), func() time.Duration { hits.Add(1); return 0 })
+			err := g.Chat(ctx, "s", "x", func(Event) {})
+			if hits.Load() != tc.want {
+				t.Errorf("hook calls = %d, want %d", hits.Load(), tc.want)
+			}
+			if tc.want == 1 && Public(err) != gateBlockText {
+				t.Errorf("block without a ban: %q, want the ordinary block line", Public(err))
+			}
+		})
+	}
+
+	// A block that starts a ban tells the shopper so.
+	g0, _ := newGate(t, &scriptAdvisor{events: innerEvents}, &fakeJev{respond: abusive}, GateEnforce)
+	banCtx := WithBlockHook(context.Background(), func() time.Duration { return 12 * time.Hour })
+	if got, want := Public(g0.Chat(banCtx, "s", "x", func(Event) {})), BannedText(12*time.Hour); got != want || !strings.Contains(got, "12 小時") {
+		t.Errorf("ban turn text = %q, want %q", got, want)
+	}
+
+	// A cooldown refusal never reaches Jev, so it is not a new block.
+	g, _ := newGate(t, &scriptAdvisor{events: innerEvents}, &fakeJev{respond: abusive}, GateEnforce)
+	var hits atomic.Int32
+	ctx := WithBlockHook(context.Background(), func() time.Duration { hits.Add(1); return 0 })
+	for range 5 {
+		g.Chat(ctx, "s", "x", func(Event) {})
+	}
+	if hits.Load() != 3 {
+		t.Errorf("hook calls over 5 turns = %d, want 3 (the last 2 hit the cooldown)", hits.Load())
+	}
+}
+
 func TestGatedCooldownAfterStrikes(t *testing.T) {
 	inner := &scriptAdvisor{events: innerEvents}
 	jev := &fakeJev{respond: jevSays("find_bag", 0.9, map[string]float64{"injection": 0.99})}
