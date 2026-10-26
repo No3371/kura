@@ -90,8 +90,10 @@ func (o *OpenAI) Chat(ctx context.Context, sessionID, message string, emit func(
 	}
 	if err != nil {
 		s.messages = s.messages[:checkpoint]
+		return err
 	}
-	return err
+	s.commit(checkpoint)
+	return nil
 }
 
 func (o *OpenAI) run(ctx context.Context, s *conversation[json.RawMessage], emit func(Event)) error {

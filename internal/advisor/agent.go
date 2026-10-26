@@ -79,8 +79,9 @@ func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(
 	}
 	defer s.mu.Unlock()
 
-	// History is append-only (thinking blocks must be replayed unchanged), and
-	// a failed turn is rolled back so the next one starts from a valid state.
+	// Turns are append-only (thinking blocks must be replayed unchanged) and
+	// only dropped whole, oldest first; a failed turn is rolled back so the
+	// next one starts from a valid state.
 	checkpoint := len(s.messages)
 	s.messages = append(s.messages, anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(message)))
 	err := c.run(ctx, s, emit)
@@ -92,8 +93,10 @@ func (c *Claude) Chat(ctx context.Context, sessionID, message string, emit func(
 	}
 	if err != nil {
 		s.messages = s.messages[:checkpoint]
+		return err
 	}
-	return err
+	s.commit(checkpoint)
+	return nil
 }
 
 func (c *Claude) run(ctx context.Context, s *conversation[anthropic.BetaMessageParam], emit func(Event)) error {
