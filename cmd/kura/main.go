@@ -48,6 +48,7 @@ type config struct {
 	judge, judgeModel          string
 	judgeBudget                time.Duration
 	chatRate, chatBurst        int
+	chatDaily                  int
 	banAfter                   int
 	banFor                     time.Duration
 	trustProxy                 bool
@@ -85,6 +86,7 @@ func main() {
 		fs.DurationVar(&c.judgeBudget, "judge-budget", 800*time.Millisecond, "longest wait for the gate's verdict before the turn fails open")
 		fs.IntVar(&c.chatRate, "chat-rate", 6, "chat turns per minute per client IP (0 = no limit)")
 		fs.IntVar(&c.chatBurst, "chat-burst", 3, "chat turns a client may send at once before -chat-rate applies")
+		fs.IntVar(&c.chatDaily, "chat-daily", 300, "chat turns per Taiwan calendar day across all clients (0 = no cap)")
 		fs.IntVar(&c.banAfter, "ban-after", 5, "gate-blocked chat turns from one client IP within an hour before it is banned (0 = no bans; needs -judge enforce)")
 		fs.DurationVar(&c.banFor, "ban-for", 12*time.Hour, "how long a banned client IP is refused chat")
 		fs.BoolVar(&c.trustProxy, "trust-proxy", false, "behind one reverse proxy (e.g. Railway): rate-limit and ban on the last X-Forwarded-For hop instead of the peer address")
@@ -242,6 +244,10 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 	if c.chatRate > 0 {
 		limiter = web.NewChatLimiter(c.chatRate, c.chatBurst)
 	}
+	var budget *web.TurnBudget
+	if c.chatDaily > 0 {
+		budget = web.NewTurnBudget(c.chatDaily)
+	}
 
 	var bans *web.Banlist
 	if c.banAfter > 0 {
@@ -253,7 +259,7 @@ func runServe(ctx context.Context, c config, log *slog.Logger) error {
 
 	srv := &web.Server{Store: d.store, Radar: eng, FX: d.fx, Advisor: adv, Log: log,
 		Crawl: d.crawlOnce(log), NoCrawlAPI: c.noCrawlAPI, BaseCtx: ctx,
-		ChatLimit: limiter, Bans: bans, TrustProxy: c.trustProxy}
+		ChatLimit: limiter, Budget: budget, Bans: bans, TrustProxy: c.trustProxy}
 	if c.crawlOnStart {
 		go srv.RunCrawl(ctx)
 	}

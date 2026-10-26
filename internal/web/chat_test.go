@@ -164,7 +164,11 @@ func TestChatClientIP(t *testing.T) {
 		{true, "10.0.0.1:5000", []string{"9.9.9.9, 1.2.3.4"}, "1.2.3.4"}, // spoofed first hop ignored
 		{true, "10.0.0.1:5000", []string{"9.9.9.9", "5.6.7.8"}, "5.6.7.8"},
 		{true, "10.0.0.1:5000", nil, "10.0.0.1"},
-		{true, "[2001:db8::1]:443", []string{" "}, "2001:db8::1"},
+		{true, "[2001:db8::1]:443", []string{" "}, "2001:db8::/64"},
+		// IPv6 keys on the /64 a subscriber can rotate inside; IPv4 stays exact.
+		{false, "[2001:db8:0:7:aaaa::1]:443", nil, "2001:db8:0:7::/64"},
+		{true, "10.0.0.1:5000", []string{"2001:db8:0:7:bbbb::2"}, "2001:db8:0:7::/64"},
+		{false, "[::ffff:203.0.113.7]:443", nil, "::ffff:203.0.113.7"},
 	}
 	for _, tc := range cases {
 		r := httptest.NewRequest(http.MethodPost, "/api/chat", nil)
@@ -191,6 +195,57 @@ func TestChatLimitBehindProxy(t *testing.T) {
 	}
 	if rec := postChat(h, "10.0.0.1:1", "6.6.6.6, 1.2.3.4", "a"); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("spoofed first hop escaped the bucket: %d", rec.Code)
+	}
+}
+
+func TestChatLimitIPv6Prefix(t *testing.T) {
+	s := testServer(t, &countingAdvisor{})
+	s.ChatLimit = NewChatLimiter(6, 1)
+	h := s.Handler()
+	if rec := postChat(h, "[2001:db8:0:7::1]:1", "", "a"); rec.Code != 200 {
+		t.Fatal(rec.Code)
+	}
+	if rec := postChat(h, "[2001:db8:0:7::2]:1", "", "a"); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("a new address in the same /64 got a fresh bucket: %d", rec.Code)
+	}
+	if rec := postChat(h, "[2001:db8:0:8::1]:1", "", "a"); rec.Code != 200 {
+		t.Errorf("another /64: %d", rec.Code)
+	}
+}
+
+func TestChatDailyBudget(t *testing.T) {
+	adv := &countingAdvisor{}
+	s := testServer(t, adv)
+	s.Budget = NewTurnBudget(2)
+	h := s.Handler()
+	// A malformed request never spends the budget.
+	if rec := postChat(h, "203.0.113.7:1", "", " "); rec.Code != http.StatusBadRequest {
+		t.Fatal(rec.Code)
+	}
+	for i, ip := range []string{"203.0.113.7:1", "198.51.100.2:1"} {
+		if rec := postChat(h, ip, "", "a"); rec.Code != 200 {
+			t.Fatalf("turn %d within budget: %d", i, rec.Code)
+		}
+	}
+	rec := postChat(h, "192.0.2.9:1", "", "a") // a third client: the cap is shared
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(errorText(t, rec), "明天") {
+		t.Fatalf("over the daily budget: %d %s", rec.Code, rec.Body)
+	}
+	if adv.calls.Load() != 2 {
+		t.Errorf("advisor calls = %d, want 2", adv.calls.Load())
+	}
+}
+
+func TestTurnBudgetResetsAtTaiwanMidnight(t *testing.T) {
+	b := NewTurnBudget(1)
+	now := time.Date(2026, 10, 16, 15, 59, 0, 0, time.UTC) // 23:59 in Taipei
+	b.now = func() time.Time { return now }
+	if !b.Take() || b.Take() {
+		t.Fatal("want one turn, then none")
+	}
+	now = now.Add(2 * time.Minute) // 00:01 the next Taipei day
+	if !b.Take() {
+		t.Error("budget did not reset at Taiwan midnight")
 	}
 }
 

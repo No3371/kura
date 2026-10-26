@@ -47,6 +47,8 @@ type Server struct {
 	BaseCtx    context.Context
 	// ChatLimit rate-limits POST /api/chat per client IP; nil = no limit.
 	ChatLimit *ChatLimiter
+	// Budget caps chat turns per day across all clients; nil = no cap.
+	Budget *TurnBudget
 	// Bans refuses POST /api/chat from an IP whose turns the gate keeps
 	// blocking; nil = no bans. Only blocks the gate enforces count.
 	Bans *Banlist
@@ -71,7 +73,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/daily", s.api(s.daily))
 	mux.HandleFunc("POST /api/crawl", s.api(s.crawl))
 	mux.HandleFunc("POST /api/chat", s.chat)
-	return mux
+	return secureHeaders(contentSecurityPolicy(sub), mux)
 }
 
 func init() {
@@ -538,6 +540,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	if utf8.RuneCountInString(req.Message) > maxChatRunes {
 		chatError(w, http.StatusBadRequest, tooLong)
+		return
+	}
+	// Taken last, so a malformed request never spends the day's budget.
+	if s.Budget != nil && !s.Budget.Take() {
+		s.Log.Warn("chat daily budget spent")
+		chatError(w, http.StatusServiceUnavailable, "顧問今天的服務量已滿，請明天再來")
 		return
 	}
 	if err := s.Radar.Refresh(r.Context()); err != nil {

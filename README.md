@@ -245,7 +245,11 @@ flowchart LR
 - **Deterministic guards first.** A content classifier cannot stop a flood of harmless
   messages, so `POST /api/chat` has a per-client token bucket (`-chat-rate 6` per minute,
   `-chat-burst 3`) and refuses messages over 1,000 characters before anything else runs.
-  Behind Railway's proxy (`-trust-proxy`) the client is the last `X-Forwarded-For` hop.
+  Behind Railway's proxy (`-trust-proxy`) the client is the last `X-Forwarded-For` hop;
+  an IPv6 client is keyed by its /64, which one subscriber can rotate inside. A shared
+  daily budget (`-chat-daily 300` turns per Taiwan calendar day) caps the advisor's
+  total spend however many clients send turns, and each session replays only its last
+  10 turns, so a long conversation's cost per turn stops growing.
 - **One classifier call per turn.** [TypeSafe Jev](https://docs.typesafe.ai) answers
   typed questions about one state in a single request: an intent Choice (find_bag,
   price_market, listing_detail, authenticity, logistics, smalltalk, off_topic) and one
@@ -338,6 +342,7 @@ export TYPESAFE_API_KEY=...              # optional; turns on the chat gate in s
 | `-judge-model` | `jev-1.14.0` (`KURA_JUDGE_MODEL`) | Jev model id (keep it versioned) |
 | `-judge-budget` | `800ms` | Longest wait for the gate's verdict before the turn fails open |
 | `-chat-rate` · `-chat-burst` | `6` · `3` | Chat turns per minute per client IP, and the burst allowance (`-chat-rate 0` = no limit) |
+| `-chat-daily` | `300` | Chat turns per Taiwan calendar day across all clients (`0` = no cap) |
 | `-ban-after` · `-ban-for` | `5` · `12h` | Gate-blocked turns from one client IP within an hour before it is refused chat for the ban duration (`-ban-after 0` = no bans; has no effect unless `-judge enforce`) |
 | `-trust-proxy` | off | Rate-limit and ban on the last `X-Forwarded-For` hop (set behind one reverse proxy, e.g. Railway) |
 

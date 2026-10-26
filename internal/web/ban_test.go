@@ -91,6 +91,8 @@ func TestChatBanned(t *testing.T) {
 	adv := &countingAdvisor{}
 	s := testServer(t, adv)
 	s.Bans = NewBanlist(1, 12*time.Hour)
+	now := time.Now()
+	s.Bans.now = func() time.Time { return now } // Retry-After must not tick down mid-test
 	h := s.Handler()
 
 	s.Bans.Strike("203.0.113.7")
