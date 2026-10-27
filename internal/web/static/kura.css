@@ -719,8 +719,16 @@ html:has(.k-adv.is-full[open]) { overflow: hidden; }
   .k-hero__cta { margin-top: 24px; }
   /* Inside the 16px gutter: a tag past the page edge would scroll the page sideways. */
   .k-hero__fig { margin: 0; }
-  .k-hero__tag { right: 4px; width: 220px; top: 78%; transform: rotate(4deg); }
+  .k-hero__tag { right: 4px; width: 188px; top: 78%; transform: rotate(4deg); }
   .k-hero__fig:hover .k-hero__tag { transform: rotate(1deg); }
+  /* A compact tag: the full one is about as tall as the mat is wide and buries
+     the first 大家都在找 rows. The grade and its zh definition stay (clamped to
+     three lines); the ja original and the shop line are on the detail page. */
+  .k-hero__tag .k-tag__card { padding: 22px 16px 14px; gap: 6px; }
+  .k-hero__tag .k-tag__head { font-size: 10px; letter-spacing: .12em; }
+  .k-hero__tag .k-tag__label { font-size: 24px; }
+  .k-hero__tag .k-tag__zh { font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .k-hero__tag .k-tag__ja, .k-hero__tag .k-tag__foot { display: none; }
   .k-want__row { grid-template-columns: 28px 64px minmax(0, 1fr); gap: 4px 14px; padding: 16px 0; align-items: start; }
   .k-want__rank, .k-want__mat { grid-row: 1 / span 3; }
   .k-want__rank { font-size: 30px; }
