@@ -1,6 +1,6 @@
 module github.com/No3371/kura
 
-go 1.26.0
+go 1.27.4
 
 require github.com/PuerkitoBio/goquery v1.13.0
 

@@ -313,7 +313,7 @@ then the hosted demo will run the gate in shadow mode only.
 
 ## Running it
 
-Requires Go 1.26+.
+Requires Go 1.27+.
 
 ```bash
 go build -o kura ./cmd/kura
